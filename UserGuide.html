@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>.manifest User Guide</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.7;
+            color: #1a1a1a;
+            background: #fafafa;
+            padding: 0;
+        }
+
+        .page {
+            max-width: 700px;
+            margin: 0 auto;
+            background: white;
+            padding: 60px 50px;
+        }
+
+        /* Cover Section */
+        .cover {
+            text-align: center;
+            padding: 80px 0;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 50px;
+        }
+
+        .cover h1 {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 48px;
+            font-weight: 700;
+            letter-spacing: -1px;
+            margin-bottom: 15px;
+        }
+
+        .cover .tagline {
+            font-size: 18px;
+            color: #666;
+            font-weight: 300;
+            margin-bottom: 30px;
+        }
+
+        .cover .version {
+            font-size: 12px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Section Headers */
+        h2 {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 28px;
+            font-weight: 600;
+            margin-top: 50px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #1a1a1a;
+        }
+
+        h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-top: 30px;
+            margin-bottom: 12px;
+            color: #333;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #444;
+        }
+
+        /* Feature Cards */
+        .feature {
+            background: #f8f8f8;
+            border-radius: 12px;
+            padding: 25px 30px;
+            margin: 25px 0;
+        }
+
+        .feature-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .feature-icon {
+            font-size: 28px;
+            margin-right: 15px;
+        }
+
+        .feature-title {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 22px;
+            font-weight: 600;
+        }
+
+        .feature ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .feature li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+            color: #555;
+        }
+
+        .feature li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #999;
+        }
+
+        /* Tips Section */
+        .tips {
+            background: linear-gradient(135deg, #f5f5f5 0%, #ececec 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 40px 0;
+        }
+
+        .tips h3 {
+            margin-top: 0;
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 20px;
+        }
+
+        .tips ol {
+            padding-left: 20px;
+        }
+
+        .tips li {
+            padding: 8px 0;
+            color: #555;
+        }
+
+        /* Intro text */
+        .intro {
+            font-size: 17px;
+            color: #555;
+            text-align: center;
+            max-width: 500px;
+            margin: 0 auto 40px auto;
+            line-height: 1.8;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding-top: 50px;
+            margin-top: 50px;
+            border-top: 1px solid #eee;
+            color: #999;
+            font-size: 13px;
+        }
+
+        .footer .heart {
+            color: #e74c3c;
+        }
+
+        /* Print styles */
+        @media print {
+            body {
+                background: white;
+            }
+            .page {
+                padding: 40px;
+                max-width: 100%;
+            }
+            .cover {
+                padding: 60px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <!-- Cover -->
+        <div class="cover">
+            <h1>.manifest</h1>
+            <p class="tagline">Live intentionally. Align your actions with your values.</p>
+            <p class="version">User Guide • Version 1.0</p>
+        </div>
+
+        <!-- Introduction -->
+        <p class="intro">
+            .manifest helps you build meaningful daily routines, track tasks that matter,
+            and connect your everyday actions to your personal values.
+        </p>
+
+        <!-- Features -->
+        <h2>Your Five Tabs</h2>
+
+        <div class="feature">
+            <div class="feature-header">
+                <span class="feature-icon">☀️</span>
+                <span class="feature-title">My Routine</span>
+            </div>
+            <p>Your daily schedule displayed on a beautiful gradient that shifts from sunrise to sunset based on your local time.</p>
+            <ul>
+                <li>Tap <strong>+</strong> to add a routine item</li>
+                <li>Set the time and give it a title</li>
+                <li>Choose which days it repeats</li>
+                <li>Enable notifications for reminders</li>
+                <li>Tap an item to mark it complete</li>
+            </ul>
+        </div>
+
+        <div class="feature">
+            <div class="feature-header">
+                <span class="feature-icon">✓</span>
+                <span class="feature-title">To-Do</span>
+            </div>
+            <p>Tasks and appointments with due dates, reminders, and the ability to connect each task to your values.</p>
+            <ul>
+                <li>Tap <strong>+</strong> to add a task or appointment</li>
+                <li>Set a due date and time</li>
+                <li>Add reminders (day before, hour before, etc.)</li>
+                <li>Link tasks to values to understand <em>why</em> they matter</li>
+                <li>Swipe left to delete, tap to complete</li>
+            </ul>
+        </div>
+
+        <div class="feature">
+            <div class="feature-header">
+                <span class="feature-icon">◇</span>
+                <span class="feature-title">Values</span>
+            </div>
+            <p>The principles that guide your life. Define what matters most to you.</p>
+            <ul>
+                <li>Tap <strong>+</strong> to add values from our library</li>
+                <li>Or create your own custom values</li>
+                <li><strong>Activate</strong> values you want to focus on now</li>
+                <li>Active values appear when creating tasks</li>
+                <li>Review and update your values anytime</li>
+            </ul>
+        </div>
+
+        <div class="feature">
+            <div class="feature-header">
+                <span class="feature-icon">📊</span>
+                <span class="feature-title">History</span>
+            </div>
+            <p>Track your progress over time and reflect on your accomplishments.</p>
+            <ul>
+                <li>View completed routines and tasks by day</li>
+                <li>See patterns in your behavior</li>
+                <li>Celebrate your consistency</li>
+            </ul>
+        </div>
+
+        <div class="feature">
+            <div class="feature-header">
+                <span class="feature-icon">⚙️</span>
+                <span class="feature-title">Settings</span>
+            </div>
+            <p>Customize your experience and manage your data.</p>
+            <ul>
+                <li><strong>User Guide</strong> — In-app help</li>
+                <li><strong>Backup & Restore</strong> — Export or import your data</li>
+                <li><strong>iCloud Sync</strong> — Sync across your devices</li>
+                <li><strong>Notifications</strong> — Manage reminders</li>
+            </ul>
+        </div>
+
+        <!-- Tips -->
+        <div class="tips">
+            <h3>Getting Started</h3>
+            <ol>
+                <li><strong>Start with Values</strong> — Add 3-5 values that matter most to you</li>
+                <li><strong>Build a Morning Routine</strong> — Add 2-3 items to start your day with intention</li>
+                <li><strong>Connect Tasks to Values</strong> — Link tasks to values to stay motivated</li>
+                <li><strong>Check History Weekly</strong> — Reflect on your progress each week</li>
+            </ol>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Made with <span class="heart">♥</span> by MindWell Games</p>
+            <p style="margin-top: 8px;">Questions? Contact mindwellgames@gmail.com</p>
+        </div>
+    </div>
+</body>
+</html>
