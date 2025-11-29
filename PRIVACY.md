@@ -58,7 +58,7 @@ We may update this privacy policy from time to time. Any changes will be reflect
 
 For questions about this privacy policy or your data:
 
-**Email:** support@mindwellgames.com
+**Email:** mindwellgames@gmail.com
 
 ---
 
