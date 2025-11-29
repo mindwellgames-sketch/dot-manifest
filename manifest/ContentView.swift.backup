@@ -1,0 +1,1441 @@
+import SwiftUI
+
+// Cup Full theme colors
+let cupBlue = Color(red: 0.047, green: 0.204, blue: 0.573) // #0c3492 - User's favorite blue
+let cupOrange = Color(red: 0.95, green: 0.75, blue: 0.65) // Peach from cup top
+let darkBlue = Color(red: 0.15, green: 0.30, blue: 0.50)
+
+struct ContentView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var selectedTab = 0
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            TodayView()
+                .tabItem {
+                    Label("Today", systemImage: "calendar")
+                }
+                .tag(0)
+
+            TasksView()
+                .tabItem {
+                    Label("Tasks", systemImage: "list.bullet")
+                }
+                .tag(1)
+
+            ValuesView()
+                .tabItem {
+                    Label("Values", systemImage: "heart.fill")
+                }
+                .tag(2)
+
+            BalanceView()
+                .tabItem {
+                    Label("Balance", systemImage: "chart.bar.fill")
+                }
+                .tag(3)
+
+            CheckInView()
+                .tabItem {
+                    Label("Check-In", systemImage: "checkmark.circle.fill")
+                }
+                .tag(4)
+
+            WeekView()
+                .tabItem {
+                    Label("Week", systemImage: "calendar.badge.clock")
+                }
+                .tag(5)
+        }
+        .accentColor(cupBlue)
+    }
+}
+
+// MARK: - Today View (Editable Routine)
+struct TodayView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var showingAddItem = false
+    @State private var editingItem: RoutineItem?
+
+    var body: some View {
+        ZStack {
+            // Gradient background
+            LinearGradient(
+                colors: [
+                    Color(red: 0.96, green: 0.98, blue: 1.0),
+                    Color(red: 0.90, green: 0.95, blue: 0.98)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Header
+                    HStack {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Cup Full")
+                                .font(.system(size: 28, weight: .bold))
+                                .foregroundColor(cupBlue)
+                            Text("Live Your Values")
+                                .font(.title3)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Button(action: { showingAddItem = true }) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(cupBlue)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+
+                    // Routine items
+                    ForEach(dataManager.routineItems) { item in
+                        RoutineItemRow(item: item, onEdit: {
+                            editingItem = item
+                        }, onDelete: {
+                            dataManager.deleteRoutineItem(item)
+                        })
+                        .padding(.horizontal, 16)
+                    }
+                    .padding(.bottom, 20)
+                }
+            }
+        }
+        .sheet(isPresented: $showingAddItem) {
+            AddEditRoutineItemView(item: nil)
+        }
+        .sheet(item: $editingItem) { item in
+            AddEditRoutineItemView(item: item)
+        }
+    }
+
+    func getGreeting() -> String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        if hour < 12 { return "Good Morning" }
+        else if hour < 17 { return "Good Afternoon" }
+        else { return "Good Evening" }
+    }
+}
+
+struct RoutineItemRow: View {
+    let item: RoutineItem
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 16) {
+            // Icon circle
+            ZStack {
+                Circle()
+                    .fill(item.color.opacity(0.2))
+                    .frame(width: 50, height: 50)
+
+                Image(systemName: item.icon)
+                    .font(.system(size: 22))
+                    .foregroundColor(item.color)
+            }
+
+            // Text content
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.activity)
+                    .font(.system(size: 17, weight: item.isImportant ? .semibold : .medium))
+                    .foregroundColor(darkBlue)
+
+                Text(item.time)
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+
+                if item.notificationEnabled {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 10))
+                        Text("Reminder on")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            // Important marker
+            if item.isImportant {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(item.color)
+            }
+
+            // Edit button
+            Menu {
+                Button(action: onEdit) {
+                    Label("Edit", systemImage: "pencil")
+                }
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.gray.opacity(0.5))
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+        )
+    }
+}
+
+struct AddEditRoutineItemView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+
+    let item: RoutineItem?
+
+    @State private var time: String
+    @State private var activity: String
+    @State private var selectedIcon: String
+    @State private var selectedColor: Color
+    @State private var isImportant: Bool
+    @State private var notificationEnabled: Bool
+    @State private var notificationHour: Int
+    @State private var notificationMinute: Int
+
+    init(item: RoutineItem?) {
+        self.item = item
+        _time = State(initialValue: item?.time ?? "")
+        _activity = State(initialValue: item?.activity ?? "")
+        _selectedIcon = State(initialValue: item?.icon ?? "star.fill")
+        _selectedColor = State(initialValue: item?.color ?? cupBlue)
+        _isImportant = State(initialValue: item?.isImportant ?? false)
+        _notificationEnabled = State(initialValue: item?.notificationEnabled ?? false)
+        _notificationHour = State(initialValue: item?.notificationHour ?? 9)
+        _notificationMinute = State(initialValue: item?.notificationMinute ?? 0)
+    }
+
+    let availableIcons = [
+        "star.fill", "heart.fill", "cup.and.saucer.fill", "fork.knife", "car.fill",
+        "figure.mind.and.body", "dumbbell.fill", "bed.double.fill", "moon.stars.fill",
+        "moon.zzz.fill", "book.fill", "music.note", "gamecontroller.fill", "laptop",
+        "phone.fill", "briefcase.fill", "person.2.fill", "house.fill"
+    ]
+
+    let availableColors = [
+        cupBlue, cupOrange, Color(red: 0.3, green: 0.7, blue: 0.7),
+        Color(red: 0.7, green: 0.5, blue: 0.9), Color(red: 0.9, green: 0.4, blue: 0.5),
+        Color(red: 0.5, green: 0.4, blue: 0.8), Color.green, Color.pink, Color.purple
+    ]
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Details") {
+                    TextField("Time (e.g., 9:00 AM)", text: $time)
+                    TextField("Activity", text: $activity)
+                }
+
+                Section("Appearance") {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 50))], spacing: 12) {
+                        ForEach(availableIcons, id: \.self) { icon in
+                            Button(action: { selectedIcon = icon }) {
+                                Image(systemName: icon)
+                                    .font(.system(size: 24))
+                                    .foregroundColor(selectedIcon == icon ? cupBlue : .gray)
+                                    .frame(width: 50, height: 50)
+                                    .background(selectedIcon == icon ? cupBlue.opacity(0.1) : Color.clear)
+                                    .cornerRadius(8)
+                            }
+                        }
+                    }
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 50))], spacing: 12) {
+                        ForEach(availableColors, id: \.self) { color in
+                            Button(action: { selectedColor = color }) {
+                                Circle()
+                                    .fill(color)
+                                    .frame(width: 40, height: 40)
+                                    .overlay(
+                                        Circle()
+                                            .strokeBorder(Color.white, lineWidth: selectedColor == color ? 3 : 0)
+                                    )
+                            }
+                        }
+                    }
+                }
+
+                Section("Options") {
+                    Toggle("Important", isOn: $isImportant)
+                    Toggle("Enable Notification", isOn: $notificationEnabled)
+
+                    if notificationEnabled {
+                        Picker("Hour", selection: $notificationHour) {
+                            ForEach(0..<24, id: \.self) { hour in
+                                Text(String(format: "%02d", hour)).tag(hour)
+                            }
+                        }
+                        Picker("Minute", selection: $notificationMinute) {
+                            ForEach([0, 15, 30, 45], id: \.self) { minute in
+                                Text(String(format: "%02d", minute)).tag(minute)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle(item == nil ? "Add Item" : "Edit Item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveItem()
+                        dismiss()
+                    }
+                    .disabled(time.isEmpty || activity.isEmpty)
+                }
+            }
+        }
+    }
+
+    private func saveItem() {
+        if let existingItem = item {
+            var updated = existingItem
+            updated.time = time
+            updated.activity = activity
+            updated.icon = selectedIcon
+            updated.colorRed = selectedColor.components.red
+            updated.colorGreen = selectedColor.components.green
+            updated.colorBlue = selectedColor.components.blue
+            updated.isImportant = isImportant
+            updated.notificationEnabled = notificationEnabled
+            updated.notificationHour = notificationEnabled ? notificationHour : nil
+            updated.notificationMinute = notificationEnabled ? notificationMinute : nil
+            dataManager.updateRoutineItem(updated)
+        } else {
+            let newItem = RoutineItem(
+                time: time,
+                activity: activity,
+                icon: selectedIcon,
+                color: selectedColor,
+                isImportant: isImportant,
+                notificationEnabled: notificationEnabled,
+                notificationHour: notificationEnabled ? notificationHour : nil,
+                notificationMinute: notificationEnabled ? notificationMinute : nil
+            )
+            dataManager.addRoutineItem(newItem)
+        }
+    }
+}
+
+// MARK: - Tasks View
+struct TasksView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var newTaskTitle = ""
+    @State private var showingValuePicker = false
+    @State private var taskBeingEdited: Task?
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.96, green: 0.98, blue: 1.0),
+                    Color(red: 0.90, green: 0.95, blue: 0.98)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Header
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Life Stuff")
+                        .font(.system(size: 36, weight: .bold))
+                        .foregroundColor(darkBlue)
+                    Text("Clear your mind")
+                        .font(.title3)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
+
+                // Add task bar
+                HStack(spacing: 12) {
+                    TextField("Add a task...", text: $newTaskTitle)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                    Button(action: addTask) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(cupBlue)
+                    }
+                    .disabled(newTaskTitle.isEmpty)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
+
+                // Tasks list
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach(dataManager.getActiveTasks()) { task in
+                            TaskRow(task: task, onComplete: {
+                                dataManager.completeTask(task)
+                            }, onEdit: {
+                                taskBeingEdited = task
+                                showingValuePicker = true
+                            }, onDelete: {
+                                dataManager.deleteTask(task)
+                            })
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 20)
+                }
+            }
+        }
+        .sheet(isPresented: $showingValuePicker) {
+            if let task = taskBeingEdited {
+                ValuePickerView(task: task)
+            }
+        }
+    }
+
+    private func addTask() {
+        guard !newTaskTitle.isEmpty else { return }
+        let task = Task(title: newTaskTitle)
+        dataManager.addTask(task)
+        newTaskTitle = ""
+    }
+}
+
+struct TaskRow: View {
+    let task: Task
+    let onComplete: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    @EnvironmentObject var dataManager: DataManager
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: onComplete) {
+                Image(systemName: "circle")
+                    .font(.system(size: 24))
+                    .foregroundColor(cupBlue)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.title)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(darkBlue)
+
+                if !task.valueIds.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(task.valueIds, id: \.self) { valueId in
+                                if let value = dataManager.values.first(where: { $0.id == valueId }) {
+                                    Text(value.name)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(cupBlue.opacity(0.1))
+                                        .foregroundColor(cupBlue)
+                                        .cornerRadius(6)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer()
+
+            Menu {
+                Button(action: onEdit) {
+                    Label("Tag Values", systemImage: "tag")
+                }
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.gray.opacity(0.5))
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+        )
+    }
+}
+
+struct ValuePickerView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+
+    let task: Task
+    @State private var selectedValueIds: Set<UUID>
+
+    init(task: Task) {
+        self.task = task
+        _selectedValueIds = State(initialValue: Set(task.valueIds))
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                ForEach(dataManager.values.filter { $0.isActive }) { value in
+                    Button(action: {
+                        if selectedValueIds.contains(value.id) {
+                            selectedValueIds.remove(value.id)
+                        } else {
+                            selectedValueIds.insert(value.id)
+                        }
+                    }) {
+                        HStack {
+                            Text(value.name)
+                                .foregroundColor(.primary)
+                            Spacer()
+                            if selectedValueIds.contains(value.id) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(cupBlue)
+                            } else {
+                                Image(systemName: "circle")
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Tag Values")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        var updatedTask = task
+                        updatedTask.valueIds = Array(selectedValueIds)
+                        dataManager.updateTask(updatedTask)
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Values View
+struct ValuesView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var showingEditValues = false
+    @State private var showingDecisionCheck = false
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.96, green: 0.98, blue: 1.0),
+                    Color(red: 0.90, green: 0.95, blue: 0.98)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Header
+                    HStack {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Your Values")
+                                .font(.system(size: 36, weight: .bold))
+                                .foregroundColor(darkBlue)
+                            Text("What matters most")
+                                .font(.title3)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Button(action: { showingEditValues = true }) {
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(cupBlue)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+
+                    // Values cards
+                    ForEach(dataManager.values.filter { $0.isActive }) { value in
+                        HStack {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(cupBlue)
+
+                            Text(value.name)
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(darkBlue)
+
+                            Spacer()
+                        }
+                        .padding(20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color.white)
+                                .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+                        )
+                        .padding(.horizontal, 20)
+                    }
+
+                    // Decision Check button
+                    Button(action: { showingDecisionCheck = true }) {
+                        HStack {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 20))
+                            Text("Check a Decision")
+                                .font(.system(size: 18, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            LinearGradient(
+                                colors: [cupBlue, cupBlue.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(16)
+                        .shadow(color: cupBlue.opacity(0.3), radius: 10, x: 0, y: 4)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 20)
+                }
+            }
+        }
+        .sheet(isPresented: $showingEditValues) {
+            EditValuesView()
+        }
+        .sheet(isPresented: $showingDecisionCheck) {
+            DecisionCheckView()
+        }
+    }
+}
+
+struct EditValuesView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+
+    let availableValues = [
+        "Family", "Security & Freedom", "Compassion & Dignity", "Contribution",
+        "Presence & Joy", "Health", "Privacy", "Equality", "Creativity",
+        "Learning", "Adventure", "Peace", "Authenticity", "Integrity",
+        "Justice", "Community", "Independence", "Wisdom", "Growth",
+        "Balance", "Gratitude", "Courage"
+    ]
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section("Your Active Values") {
+                    ForEach(dataManager.values) { value in
+                        HStack {
+                            Text(value.name)
+                            Spacer()
+                            Button(action: {
+                                var updated = value
+                                updated.isActive.toggle()
+                                dataManager.updateValue(updated)
+                            }) {
+                                Image(systemName: value.isActive ? "checkmark.circle.fill" : "circle")
+                                    .foregroundColor(value.isActive ? cupBlue : .gray)
+                            }
+                        }
+                    }
+                }
+
+                Section("Add New Value") {
+                    ForEach(availableValues.filter { valueName in
+                        !dataManager.values.contains(where: { $0.name == valueName })
+                    }, id: \.self) { valueName in
+                        Button(action: {
+                            dataManager.addValue(UserValue(name: valueName, isActive: true))
+                        }) {
+                            HStack {
+                                Text(valueName)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundColor(cupBlue)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Edit Values")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+struct DecisionCheckView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+
+    @State private var situation = ""
+    @State private var optionA = ""
+    @State private var optionB = ""
+    @State private var optionC = ""
+    @State private var valuesForA: Set<UUID> = []
+    @State private var valuesForB: Set<UUID> = []
+    @State private var valuesForC: Set<UUID> = []
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("The Decision") {
+                    TextField("Describe the situation", text: $situation, axis: .vertical)
+                        .lineLimit(3...6)
+                }
+
+                Section("Option A") {
+                    TextField("Option A", text: $optionA)
+
+                    if !optionA.isEmpty {
+                        ForEach(dataManager.values.filter { $0.isActive }) { value in
+                            Toggle(value.name, isOn: Binding(
+                                get: { valuesForA.contains(value.id) },
+                                set: { isOn in
+                                    if isOn {
+                                        valuesForA.insert(value.id)
+                                    } else {
+                                        valuesForA.remove(value.id)
+                                    }
+                                }
+                            ))
+                            .toggleStyle(SwitchToggleStyle(tint: cupBlue))
+                        }
+                    }
+                }
+
+                Section("Option B") {
+                    TextField("Option B", text: $optionB)
+
+                    if !optionB.isEmpty {
+                        ForEach(dataManager.values.filter { $0.isActive }) { value in
+                            Toggle(value.name, isOn: Binding(
+                                get: { valuesForB.contains(value.id) },
+                                set: { isOn in
+                                    if isOn {
+                                        valuesForB.insert(value.id)
+                                    } else {
+                                        valuesForB.remove(value.id)
+                                    }
+                                }
+                            ))
+                            .toggleStyle(SwitchToggleStyle(tint: cupBlue))
+                        }
+                    }
+                }
+
+                Section("Option C (Optional)") {
+                    TextField("Option C", text: $optionC)
+
+                    if !optionC.isEmpty {
+                        ForEach(dataManager.values.filter { $0.isActive }) { value in
+                            Toggle(value.name, isOn: Binding(
+                                get: { valuesForC.contains(value.id) },
+                                set: { isOn in
+                                    if isOn {
+                                        valuesForC.insert(value.id)
+                                    } else {
+                                        valuesForC.remove(value.id)
+                                    }
+                                }
+                            ))
+                            .toggleStyle(SwitchToggleStyle(tint: cupBlue))
+                        }
+                    }
+                }
+
+                if !optionA.isEmpty && !optionB.isEmpty {
+                    Section("Summary") {
+                        VStack(alignment: .leading, spacing: 16) {
+                            DecisionSummary(title: optionA, valueIds: valuesForA)
+                            DecisionSummary(title: optionB, valueIds: valuesForB)
+                            if !optionC.isEmpty {
+                                DecisionSummary(title: optionC, valueIds: valuesForC)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Decision Check")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+struct DecisionSummary: View {
+    let title: String
+    let valueIds: Set<UUID>
+
+    @EnvironmentObject var dataManager: DataManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(darkBlue)
+
+            if valueIds.isEmpty {
+                Text("No values selected")
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+            } else {
+                FlexibleView(
+                    data: valueIds.compactMap { id in dataManager.values.first(where: { $0.id == id }) },
+                    spacing: 6
+                ) { value in
+                    Text(value.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(cupBlue.opacity(0.1))
+                        .foregroundColor(cupBlue)
+                        .cornerRadius(8)
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(red: 0.96, green: 0.98, blue: 1.0))
+        )
+    }
+}
+
+// Helper for flexible wrapping layout
+struct FlexibleView<Data: Collection, Content: View>: View where Data.Element: Hashable {
+    let data: Data
+    let spacing: CGFloat
+    let content: (Data.Element) -> Content
+
+    @State private var availableWidth: CGFloat = 0
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+                .frame(height: 1)
+                .readSize { size in
+                    availableWidth = size.width
+                }
+
+            FlexibleViewContent(
+                availableWidth: availableWidth,
+                data: data,
+                spacing: spacing,
+                content: content
+            )
+        }
+    }
+}
+
+struct FlexibleViewContent<Data: Collection, Content: View>: View where Data.Element: Hashable {
+    let availableWidth: CGFloat
+    let data: Data
+    let spacing: CGFloat
+    let content: (Data.Element) -> Content
+
+    var body: some View {
+        var width = CGFloat.zero
+        var height = CGFloat.zero
+        let dataArray = Array(data)
+
+        return ZStack(alignment: .topLeading) {
+            ForEach(dataArray.indices, id: \.self) { index in
+                let item = dataArray[index]
+                let isLast = (index == dataArray.count - 1)
+
+                content(item)
+                    .padding([.trailing, .bottom], spacing)
+                    .alignmentGuide(.leading) { dimension in
+                        if abs(width - dimension.width) > availableWidth {
+                            width = 0
+                            height -= dimension.height
+                        }
+                        let result = width
+                        if isLast {
+                            width = 0
+                        } else {
+                            width -= dimension.width
+                        }
+                        return result
+                    }
+                    .alignmentGuide(.top) { _ in
+                        let result = height
+                        if isLast {
+                            height = 0
+                        }
+                        return result
+                    }
+            }
+        }
+    }
+}
+
+extension View {
+    func readSize(onChange: @escaping (CGSize) -> Void) -> some View {
+        background(
+            GeometryReader { geometry in
+                Color.clear
+                    .preference(key: SizePreferenceKey.self, value: geometry.size)
+            }
+        )
+        .onPreferenceChange(SizePreferenceKey.self, perform: onChange)
+    }
+}
+
+struct SizePreferenceKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {}
+}
+
+// MARK: - Balance View
+struct BalanceView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var selectedPeriod = 7
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.96, green: 0.98, blue: 1.0),
+                    Color(red: 0.90, green: 0.95, blue: 0.98)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Header
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Balance")
+                            .font(.system(size: 36, weight: .bold))
+                            .foregroundColor(darkBlue)
+                        Text("Values you're serving")
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+
+                    // Period picker
+                    Picker("Period", selection: $selectedPeriod) {
+                        Text("7 Days").tag(7)
+                        Text("14 Days").tag(14)
+                        Text("30 Days").tag(30)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal, 20)
+
+                    let balanceData = dataManager.getBalanceData(days: selectedPeriod)
+                    let maxCount = balanceData.map { $0.count }.max() ?? 1
+
+                    if balanceData.allSatisfy({ $0.count == 0 }) {
+                        VStack(spacing: 12) {
+                            Image(systemName: "chart.bar")
+                                .font(.system(size: 60))
+                                .foregroundColor(cupBlue.opacity(0.5))
+                            Text("No completed tasks yet")
+                                .font(.title3)
+                                .foregroundColor(.secondary)
+                            Text("Complete tasks with value tags to see your balance")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 60)
+                    } else {
+                        ForEach(balanceData, id: \.value.id) { item in
+                            BalanceBar(
+                                value: item.value,
+                                count: item.count,
+                                maxCount: maxCount
+                            )
+                        }
+                        .padding(.horizontal, 20)
+                    }
+
+                    Spacer().frame(height: 20)
+                }
+            }
+        }
+    }
+}
+
+struct BalanceBar: View {
+    let value: UserValue
+    let count: Int
+    let maxCount: Int
+
+    var percentage: CGFloat {
+        guard maxCount > 0 else { return 0 }
+        return CGFloat(count) / CGFloat(maxCount)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(value.name)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(darkBlue)
+
+                Spacer()
+
+                Text("\(count)")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(cupBlue)
+            }
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.1))
+                        .frame(height: 24)
+                        .cornerRadius(12)
+
+                    Rectangle()
+                        .fill(cupBlue)
+                        .frame(width: geometry.size.width * percentage, height: 24)
+                        .cornerRadius(12)
+                }
+            }
+            .frame(height: 24)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+        )
+    }
+}
+
+// MARK: - Check-In View (Keep as-is)
+struct CheckInView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var checkIn: DailyCheckIn
+    @State private var showingSaved = false
+
+    init() {
+        _checkIn = State(initialValue: DailyCheckIn())
+    }
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.96, green: 0.98, blue: 1.0),
+                    Color(red: 0.90, green: 0.95, blue: 0.98)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Header
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Daily Check-In")
+                            .font(.system(size: 36, weight: .bold))
+                            .foregroundColor(darkBlue)
+
+                        Text("Did you protect your boundaries?")
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+
+                    // Toggles
+                    VStack(spacing: 16) {
+                        CheckInToggle(
+                            title: "Meditation",
+                            subtitle: "20 min at the beach after drop-off",
+                            icon: "figure.mind.and.body",
+                            color: Color(red: 0.3, green: 0.7, blue: 0.7),
+                            isOn: Binding(
+                                get: { checkIn.didMeditate ?? false },
+                                set: { checkIn.didMeditate = $0 }
+                            )
+                        )
+
+                        CheckInToggle(
+                            title: "Stopped Coding at 8pm",
+                            subtitle: "Protected time with family",
+                            icon: "moon.stars.fill",
+                            color: Color(red: 0.9, green: 0.4, blue: 0.5),
+                            isOn: Binding(
+                                get: { checkIn.stoppedCodingAt8 ?? false },
+                                set: { checkIn.stoppedCodingAt8 = $0 }
+                            )
+                        )
+
+                        CheckInToggle(
+                            title: "Bedtime Routine by 9:30",
+                            subtitle: "Teeth, CPAP, coffee, PJs",
+                            icon: "bed.double.fill",
+                            color: Color(red: 0.5, green: 0.4, blue: 0.8),
+                            isOn: Binding(
+                                get: { checkIn.startedBedtimeRoutine ?? false },
+                                set: { checkIn.startedBedtimeRoutine = $0 }
+                            )
+                        )
+                    }
+                    .padding(.horizontal, 20)
+
+                    // Presence rating
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("How present were you with family?")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(darkBlue)
+
+                        HStack(spacing: 12) {
+                            ForEach(1...5, id: \.self) { rating in
+                                Button(action: {
+                                    checkIn.presenceRating = rating
+                                }) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(checkIn.presenceRating == rating ? cupBlue : Color.gray.opacity(0.1))
+                                            .frame(width: 54, height: 54)
+
+                                        Text("\(rating)")
+                                            .font(.system(size: 20, weight: .semibold))
+                                            .foregroundColor(checkIn.presenceRating == rating ? .white : .gray)
+                                    }
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.white)
+                            .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+                    )
+                    .padding(.horizontal, 20)
+
+                    // Save button
+                    Button(action: saveCheckIn) {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 20))
+                            Text("Save Check-In")
+                                .font(.system(size: 18, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            LinearGradient(
+                                colors: [cupBlue, cupBlue.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(16)
+                        .shadow(color: cupBlue.opacity(0.3), radius: 10, x: 0, y: 4)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 20)
+                }
+            }
+        }
+        .onAppear {
+            checkIn = dataManager.getTodayCheckIn()
+        }
+        .alert("Saved!", isPresented: $showingSaved) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Your check-in has been saved.")
+        }
+    }
+
+    private func saveCheckIn() {
+        dataManager.updateTodayCheckIn(checkIn)
+        showingSaved = true
+    }
+}
+
+struct CheckInToggle: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.2))
+                    .frame(width: 50, height: 50)
+
+                Image(systemName: icon)
+                    .font(.system(size: 22))
+                    .foregroundColor(color)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundColor(darkBlue)
+
+                Text(subtitle)
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .tint(color)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+        )
+    }
+}
+
+// MARK: - Week View (Keep as-is)
+struct WeekView: View {
+    @EnvironmentObject var dataManager: DataManager
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.96, green: 0.98, blue: 1.0),
+                    Color(red: 0.90, green: 0.95, blue: 0.98)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Header
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("This Week")
+                            .font(.system(size: 36, weight: .bold))
+                            .foregroundColor(darkBlue)
+
+                        Text("Your boundary progress")
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+
+                    if dataManager.getWeekCheckIns().isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "cup.and.saucer")
+                                .font(.system(size: 60))
+                                .foregroundColor(cupBlue.opacity(0.5))
+                            Text("No check-ins yet")
+                                .font(.title3)
+                                .foregroundColor(.secondary)
+                            Text("Complete your first daily check-in to track progress")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 60)
+                    } else {
+                        ForEach(dataManager.getWeekCheckIns()) { checkIn in
+                            WeekDayCard(checkIn: checkIn)
+                                .padding(.horizontal, 20)
+                        }
+                        .padding(.bottom, 20)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct WeekDayCard: View {
+    let checkIn: DailyCheckIn
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(checkIn.date, style: .date)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(darkBlue)
+
+                    Text(checkIn.date, formatter: dayFormatter)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                if let rating = checkIn.presenceRating {
+                    HStack(spacing: 4) {
+                        ForEach(1...5, id: \.self) { star in
+                            Image(systemName: star <= rating ? "star.fill" : "star")
+                                .font(.system(size: 14))
+                                .foregroundColor(star <= rating ? cupOrange : .gray.opacity(0.3))
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
+                CheckBadge(
+                    label: "Meditation",
+                    isChecked: checkIn.didMeditate,
+                    color: Color(red: 0.3, green: 0.7, blue: 0.7)
+                )
+
+                CheckBadge(
+                    label: "Stop@8",
+                    isChecked: checkIn.stoppedCodingAt8,
+                    color: Color(red: 0.9, green: 0.4, blue: 0.5)
+                )
+
+                CheckBadge(
+                    label: "Bedtime",
+                    isChecked: checkIn.startedBedtimeRoutine,
+                    color: Color(red: 0.5, green: 0.4, blue: 0.8)
+                )
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+        )
+    }
+
+    private var dayFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        return formatter
+    }
+}
+
+struct CheckBadge: View {
+    let label: String
+    let isChecked: Bool?
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: checkmarkIcon)
+                .font(.system(size: 12))
+                .foregroundColor(checkmarkColor)
+
+            Text(label)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(checkmarkColor)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(backgroundColor)
+        )
+    }
+
+    private var checkmarkIcon: String {
+        switch isChecked {
+        case .some(true): return "checkmark.circle.fill"
+        case .some(false): return "xmark.circle.fill"
+        case .none: return "circle.dashed"
+        }
+    }
+
+    private var checkmarkColor: Color {
+        switch isChecked {
+        case .some(true): return color
+        case .some(false): return .red.opacity(0.7)
+        case .none: return .gray
+        }
+    }
+
+    private var backgroundColor: Color {
+        switch isChecked {
+        case .some(true): return color.opacity(0.2)
+        case .some(false): return .red.opacity(0.1)
+        case .none: return .gray.opacity(0.1)
+        }
+    }
+}
+
+// MARK: - Color Extension
+extension Color {
+    var components: (red: Double, green: Double, blue: Double, opacity: Double) {
+        #if canImport(UIKit)
+        typealias NativeColor = UIColor
+        #elseif canImport(AppKit)
+        typealias NativeColor = NSColor
+        #endif
+
+        var r: CGFloat = 0
+        var g: CGFloat = 0
+        var b: CGFloat = 0
+        var o: CGFloat = 0
+
+        guard NativeColor(self).getRed(&r, green: &g, blue: &b, alpha: &o) else {
+            return (0, 0, 0, 0)
+        }
+
+        return (Double(r), Double(g), Double(b), Double(o))
+    }
+}

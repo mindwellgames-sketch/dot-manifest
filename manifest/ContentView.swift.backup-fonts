@@ -1,0 +1,2125 @@
+import SwiftUI
+
+// MARK: - Main Content View with 4 Tabs
+struct ContentView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var selectedTab = 0
+    @State private var showLoadingScreen = true
+
+    var body: some View {
+        ZStack {
+            // Main Tab View
+            TabView(selection: $selectedTab) {
+                RoutineView()
+                    .tabItem {
+                        Image("routine")
+                    }
+                    .tag(0)
+
+                ToDoView()
+                    .tabItem {
+                        Image("clipboard")
+                    }
+                    .tag(1)
+
+                ValuesView()
+                    .tabItem {
+                        Image("compass")
+                    }
+                    .tag(2)
+
+                HistoryView()
+                    .tabItem {
+                        Image("history")
+                    }
+                    .tag(3)
+            }
+            .accentColor(.black)
+
+            // Loading Screen Overlay
+            if showLoadingScreen {
+                LoadingScreen(isShowing: $showLoadingScreen)
+                    .transition(.opacity)
+            }
+        }
+    }
+}
+
+// MARK: - Loading Screen with Quote
+struct LoadingScreen: View {
+    @EnvironmentObject var dataManager: DataManager
+    @Binding var isShowing: Bool
+    @State private var quote: Quote?
+
+    var body: some View {
+        ZStack {
+            Color.white
+                .ignoresSafeArea()
+
+            VStack(spacing: 30) {
+                Text(".manifest")
+                    .font(.custom("Georgia", size: 24))
+                    .foregroundColor(.black)
+
+                if let quote = quote {
+                    VStack(spacing: 12) {
+                        Text("\"\(quote.text)\"")
+                            .font(.system(size: 18, weight: .regular))
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+
+                        Text("— \(quote.author)")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
+        }
+        .onTapGesture {
+            withAnimation(.easeOut(duration: 0.4)) {
+                isShowing = false
+            }
+        }
+        .onAppear {
+            quote = dataManager.randomQuote()
+        }
+    }
+}
+
+// MARK: - Routine View (Tab 1) - Timeline View
+struct RoutineView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var showingAddRoutine = false
+    @State private var selectedDate: Date = Date()
+
+    // Filter routines for selected day's weekday
+    var filteredRoutines: [RoutineItem] {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: selectedDate) - 1 // 0=Sun, 6=Sat
+
+        return dataManager.routineItems.filter { item in
+            item.isActiveOn(weekday: weekday) && item.startTime != nil
+        }.sorted { ($0.startTime ?? Date()) < ($1.startTime ?? Date()) }
+    }
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.98, green: 0.98, blue: 0.98)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Month label and Date Selector
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text(monthYearString)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.black)
+
+                        Spacer()
+
+                        Text("MY ROUTINE")
+                            .font(.custom("Georgia-Bold", size: 36))
+                            .foregroundColor(.black)
+                    }
+                    .padding(.horizontal)
+
+                    DateSelector(selectedDate: $selectedDate)
+                        .padding(.horizontal)
+                }
+                .padding(.top, 16)
+                .padding(.bottom, 12)
+                .background(Color.white)
+                .shadow(color: Color.black.opacity(0.05), radius: 4, y: 2)
+
+                if filteredRoutines.isEmpty {
+                    // Empty State
+                    VStack(spacing: 20) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 72, weight: .thin))
+                            .foregroundColor(.gray.opacity(0.3))
+
+                        Text("No routines for \(dayName)")
+                            .font(.title2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.gray)
+
+                        Text("Tap + to add a routine")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    // Timeline View
+                    TimelineView(routines: filteredRoutines)
+                }
+            }
+
+            // Floating Action Button
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        showingAddRoutine = true
+                    }) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 60, height: 60)
+                            .background(
+                                Circle()
+                                    .fill(Color.black)
+                                    .shadow(color: Color.black.opacity(0.25), radius: 12, x: 0, y: 6)
+                            )
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 20)
+                }
+            }
+        }
+        .sheet(isPresented: $showingAddRoutine) {
+            AddRoutineItemView()
+        }
+    }
+
+    var monthYearString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter.string(from: selectedDate)
+    }
+
+    var dayName: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: selectedDate)
+    }
+}
+
+// MARK: - Date Selector Component
+struct DateSelector: View {
+    @Binding var selectedDate: Date
+
+    var dates: [Date] {
+        let calendar = Calendar.current
+        return (0..<7).map { offset in
+            calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: Date()))!
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(dates, id: \.self) { date in
+                let isSelected = Calendar.current.isDate(date, inSameDayAs: selectedDate)
+
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        selectedDate = date
+                    }
+                }) {
+                    VStack(spacing: 4) {
+                        // Date number (large)
+                        Text("\(Calendar.current.component(.day, from: date))")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(isSelected ? .white : .black)
+
+                        // Day letter (small)
+                        Text(dayLetter(date))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(isSelected ? .white.opacity(0.9) : .gray)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(isSelected ? Color.black : Color.white)
+                            .shadow(color: isSelected ? Color.black.opacity(0.2) : Color.clear, radius: 8, y: 4)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    func dayLetter(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "E"
+        let dayString = formatter.string(from: date)
+        return String(dayString.prefix(1))
+    }
+}
+
+// MARK: - Timeline View Component
+struct TimelineView: View {
+    let routines: [RoutineItem]
+    let timeWidth: CGFloat = 65
+
+    var body: some View {
+        ScrollView {
+            ZStack(alignment: .topLeading) {
+                // Time labels positioned at card tops
+                ForEach(Array(routines.enumerated()), id: \.element.id) { index, routine in
+                    Text(timeString(routine.startTime))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.gray)
+                        .frame(width: timeWidth, alignment: .trailing)
+                        .padding(.trailing, 4)
+                        .offset(y: CGFloat(index) * 92) // 80px card + 12px spacing
+                }
+
+                // Routine cards
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(routines) { routine in
+                        TimelineCard(routine: routine, timeWidth: timeWidth)
+                            .padding(.leading, timeWidth + 8)
+                            .padding(.trailing, 16)
+                    }
+                }
+            }
+            .padding(.top, 20)
+            .padding(.bottom, 100)
+        }
+    }
+
+    func timeString(_ date: Date?) -> String {
+        guard let date = date else { return "" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: - Timeline Card
+struct TimelineCard: View {
+    @EnvironmentObject var dataManager: DataManager
+    let routine: RoutineItem
+    let timeWidth: CGFloat
+    @State private var showingEditSheet = false
+    @State private var showingValuesToast = false
+    @State private var dragOffset: CGFloat = 0
+    @State private var isDragging = false
+
+    var cardHeight: CGFloat {
+        return 80 // Standard size for all cards
+    }
+
+    var valueNames: String {
+        let names = routine.valueIds.compactMap { valueId in
+            dataManager.values.first(where: { $0.id == valueId })?.name
+        }
+        return "Serves: " + names.joined(separator: ", ")
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icon
+            Image(systemName: routine.icon)
+                .font(.system(size: 20))
+                .foregroundColor(.black)
+                .frame(width: 32)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(routine.title)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.black)
+                    .lineLimit(1)
+
+                Text(timeRangeString)
+                    .font(.system(size: 13))
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+
+                // Dots + info icon for values
+                if !routine.valueIds.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(0..<routine.valueIds.count, id: \.self) { _ in
+                            Circle()
+                                .fill(Color.black)
+                                .frame(width: 5, height: 5)
+                        }
+
+                        Button(action: {
+                            showingValuesToast = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                                showingValuesToast = false
+                            }
+                        }) {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Spacer()
+        }
+        .padding(12)
+        .frame(height: cardHeight)
+        .clipped()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(isDragging ? 0.15 : 0.08), radius: isDragging ? 12 : 8, x: 0, y: isDragging ? 6 : 4)
+        )
+        .scaleEffect(isDragging ? 1.02 : 1.0)
+        .offset(y: dragOffset)
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    isDragging = true
+                    dragOffset = value.translation.height
+                }
+                .onEnded { value in
+                    isDragging = false
+                    handleDragEnd(translation: value.translation.height)
+                }
+        )
+        .onTapGesture {
+            if !isDragging {
+                showingEditSheet = true
+            }
+        }
+        .overlay(
+            Group {
+                if showingValuesToast {
+                    VStack {
+                        Spacer()
+                        Text(valueNames)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.85))
+                            .cornerRadius(6)
+                            .padding(.bottom, 6)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.3), value: showingValuesToast)
+                }
+            }
+        )
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isDragging)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: dragOffset)
+        .sheet(isPresented: $showingEditSheet) {
+            EditRoutineItemView(item: routine)
+        }
+    }
+
+    var timeRangeString: String {
+        guard let start = routine.startTime, let end = routine.endTime else { return "" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return "\(formatter.string(from: start)) - \(formatter.string(from: end))"
+    }
+
+    func handleDragEnd(translation: CGFloat) {
+        guard let startTime = routine.startTime, let endTime = routine.endTime else {
+            dragOffset = 0
+            return
+        }
+
+        // Convert pixels to minutes (80px per hour = 1.33px per minute)
+        let pixelsPerMinute: CGFloat = 80.0 / 60.0
+        let dragMinutes = Int(translation / pixelsPerMinute)
+
+        // Snap to 15-minute intervals
+        let snappedMinutes = (dragMinutes / 15) * 15
+
+        // Skip if no significant movement
+        if snappedMinutes == 0 {
+            withAnimation {
+                dragOffset = 0
+            }
+            return
+        }
+
+        // Calculate new times
+        let calendar = Calendar.current
+        guard let newStartTime = calendar.date(byAdding: .minute, value: snappedMinutes, to: startTime),
+              let newEndTime = calendar.date(byAdding: .minute, value: snappedMinutes, to: endTime) else {
+            withAnimation {
+                dragOffset = 0
+            }
+            return
+        }
+
+        // Update the routine item
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        let timeString = "\(formatter.string(from: newStartTime)) - \(formatter.string(from: newEndTime))"
+
+        let notifHour = routine.notificationEnabled ? calendar.component(.hour, from: newStartTime) : nil
+        let notifMinute = routine.notificationEnabled ? calendar.component(.minute, from: newStartTime) : nil
+
+        let updatedItem = RoutineItem(
+            id: routine.id,
+            title: routine.title,
+            time: timeString,
+            icon: routine.icon,
+            valueIds: routine.valueIds,
+            notificationEnabled: routine.notificationEnabled,
+            notificationHour: notifHour,
+            notificationMinute: notifMinute,
+            startTime: newStartTime,
+            endTime: newEndTime,
+            activeDays: routine.activeDays
+        )
+
+        dataManager.updateRoutineItem(updatedItem)
+
+        // Reset drag offset with animation
+        withAnimation {
+            dragOffset = 0
+        }
+    }
+}
+
+struct RoutineItemRow: View {
+    @EnvironmentObject var dataManager: DataManager
+    let item: RoutineItem
+    @State private var isCompleted = false
+    @State private var showingValuesToast = false
+    @State private var showingEditSheet = false
+
+    var valueNames: String {
+        let names = item.valueIds.compactMap { valueId in
+            dataManager.values.first(where: { $0.id == valueId })?.name
+        }
+        return "Serves: " + names.joined(separator: ", ")
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Checkbox
+            Button(action: {
+                isCompleted.toggle()
+                if isCompleted {
+                    dataManager.addCompletedRoutineToHistory(routineId: item.id)
+                    // Show toast with values served
+                    if !item.valueIds.isEmpty {
+                        showingValuesToast = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                            showingValuesToast = false
+                        }
+                    }
+                }
+            }) {
+                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 24))
+                    .foregroundColor(isCompleted ? .black : .gray)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title)
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundColor(.black)
+                    .strikethrough(isCompleted, color: .gray)
+
+                if !item.time.isEmpty {
+                    Text(item.time)
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                }
+
+                // Show dots + info icon for values
+                if !item.valueIds.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(0..<item.valueIds.count, id: \.self) { _ in
+                            Circle()
+                                .fill(Color.black)
+                                .frame(width: 6, height: 6)
+                        }
+
+                        Button(action: {
+                            showingValuesToast = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                showingValuesToast = false
+                            }
+                        }) {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 14))
+                                .foregroundColor(.gray)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Spacer()
+
+            Image(systemName: item.icon)
+                .font(.system(size: 20))
+                .foregroundColor(.gray)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
+        )
+        .onTapGesture {
+            showingEditSheet = true
+        }
+        .overlay(
+            Group {
+                if showingValuesToast {
+                    VStack {
+                        Spacer()
+                        Text(valueNames)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.black.opacity(0.85))
+                            .cornerRadius(8)
+                            .padding(.bottom, 8)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.3), value: showingValuesToast)
+                }
+            }
+        )
+        .sheet(isPresented: $showingEditSheet) {
+            EditRoutineItemView(item: item)
+        }
+    }
+}
+
+// MARK: - To-Do View (Tab 2) with Gradient
+struct ToDoView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var showingAddTask = false
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color(red: 0.98, green: 0.98, blue: 0.98)
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 16) {
+                        // Overdue Section
+                        if !dataManager.overdueTasks.isEmpty {
+                            OverdueSection(tasks: dataManager.overdueTasks)
+                        }
+
+                        // Active Tasks (Gradient)
+                        ForEach(dataManager.activeNonOverdueTasks) { task in
+                            TaskCard(task: task)
+                        }
+                    }
+                    .padding()
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack {
+                        Text("TO DO LIST")
+                            .font(.custom("Georgia-Bold", size: 36))
+                            .foregroundColor(.black)
+                            .offset(y: 15)
+
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, -136)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showingAddTask = true
+                    }) {
+                        Image(systemName: "plus")
+                            .foregroundColor(.black)
+                    }
+                }
+            }
+            .sheet(isPresented: $showingAddTask) {
+                AddTaskView()
+            }
+        }
+    }
+}
+
+struct OverdueSection: View {
+    let tasks: [Task]
+    @State private var isExpanded = true
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            Button(action: {
+                withAnimation {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                    Text("OVERDUE · \(tasks.count)")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.red)
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .foregroundColor(.gray)
+                }
+                .padding()
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(8)
+            }
+
+            // Tasks
+            if isExpanded {
+                VStack(spacing: 8) {
+                    ForEach(tasks) { task in
+                        TaskCard(task: task, isOverdue: true)
+                    }
+                }
+                .padding(.top, 8)
+            }
+        }
+    }
+}
+
+struct TaskCard: View {
+    @EnvironmentObject var dataManager: DataManager
+    let task: Task
+    var isOverdue: Bool = false
+    @State private var showingValuesToast = false
+    @State private var showingEditSheet = false
+
+    var valueNames: String {
+        let names = task.valueIds.compactMap { valueId in
+            dataManager.values.first(where: { $0.id == valueId })?.name
+        }
+        return "Serves: " + names.joined(separator: ", ")
+    }
+
+    var backgroundColor: Color {
+        if isOverdue {
+            return Color(red: 0.6, green: 0.1, blue: 0.1) // Dark red
+        }
+
+        guard let days = task.daysUntilDue else {
+            return Color.gray.opacity(0.3)
+        }
+
+        // Gradient: 0 days = red, 14+ days = green
+        switch days {
+        case 0:
+            return Color(red: 0.94, green: 0.27, blue: 0.27) // Bright red
+        case 1:
+            return Color(red: 0.97, green: 0.44, blue: 0.44) // Light red
+        case 2:
+            return Color(red: 0.98, green: 0.45, blue: 0.09) // Red-orange
+        case 3...4:
+            return Color(red: 0.98, green: 0.57, blue: 0.24) // Orange
+        case 5...6:
+            return Color(red: 0.98, green: 0.80, blue: 0.08) // Yellow
+        case 7...9:
+            return Color(red: 0.52, green: 0.80, blue: 0.09) // Yellow-green
+        case 10...13:
+            return Color(red: 0.20, green: 0.82, blue: 0.60) // Green
+        default:
+            return Color(red: 0.06, green: 0.72, blue: 0.51) // Deep green
+        }
+    }
+
+    var textColor: Color {
+        if isOverdue {
+            return .white
+        }
+        guard let days = task.daysUntilDue else { return .black }
+        return days < 5 ? .white : .black
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: {
+                dataManager.completeTask(task)
+            }) {
+                Image(systemName: "circle")
+                    .font(.system(size: 24))
+                    .foregroundColor(textColor)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.title)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundColor(textColor)
+
+                Text(dueDateText)
+                    .font(.system(size: 13))
+                    .foregroundColor(textColor.opacity(0.8))
+
+                // Show dots + info icon for values
+                if !task.valueIds.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(0..<task.valueIds.count, id: \.self) { _ in
+                            Circle()
+                                .fill(textColor)
+                                .frame(width: 6, height: 6)
+                        }
+
+                        Button(action: {
+                            showingValuesToast = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                showingValuesToast = false
+                            }
+                        }) {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 14))
+                                .foregroundColor(textColor.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Spacer()
+
+            if task.isRecurring {
+                Image(systemName: "repeat")
+                    .font(.system(size: 14))
+                    .foregroundColor(textColor.opacity(0.7))
+            }
+        }
+        .padding(16)
+        .background(backgroundColor)
+        .cornerRadius(12)
+        .onTapGesture {
+            showingEditSheet = true
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(action: {
+                dataManager.completeTask(task)
+            }) {
+                Label("Complete", systemImage: "checkmark")
+            }
+            .tint(.green)
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button(role: .destructive, action: {
+                dataManager.deleteTask(task)
+            }) {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .overlay(
+            Group {
+                if showingValuesToast {
+                    VStack {
+                        Spacer()
+                        Text(valueNames)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.black.opacity(0.85))
+                            .cornerRadius(8)
+                            .padding(.bottom, 8)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.3), value: showingValuesToast)
+                }
+            }
+        )
+        .sheet(isPresented: $showingEditSheet) {
+            EditTaskView(task: task)
+        }
+    }
+
+    var dueDateText: String {
+        guard let dueDate = task.dueDate else { return "" }
+        let calendar = Calendar.current
+
+        if calendar.isDateInToday(dueDate) {
+            return "Want done by: Today"
+        } else if calendar.isDateInTomorrow(dueDate) {
+            return "Want done by: Tomorrow"
+        } else if let days = task.daysUntilDue, days < 7 {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE"
+            return "Want done by: \(formatter.string(from: dueDate))"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM d"
+            return "Want done by: \(formatter.string(from: dueDate))"
+        }
+    }
+}
+
+// MARK: - Values View (Tab 3)
+struct ValuesView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var searchText = ""
+    @State private var showingAddCustomValue = false
+    @State private var showingSearch = false
+
+    var activeValues: [Value] {
+        dataManager.values.filter { $0.isActive }.sorted { $0.name < $1.name }
+    }
+
+    var inactiveValues: [Value] {
+        let filtered = dataManager.values.filter { !$0.isActive }
+        if searchText.isEmpty {
+            return filtered.sorted { $0.name < $1.name }
+        } else {
+            return filtered.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText)
+            }.sorted { $0.name < $1.name }
+        }
+    }
+
+    // Group inactive values by first letter
+    var groupedInactiveValues: [(String, [Value])] {
+        let grouped = Dictionary(grouping: inactiveValues) { value in
+            String(value.name.prefix(1)).uppercased()
+        }
+        return grouped.sorted { $0.key < $1.key }.map { ($0.key, $0.value.sorted { $0.name < $1.name }) }
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                // Active Values Section
+                if !activeValues.isEmpty {
+                    Section(header: Text("I'm focussing on these (\(activeValues.count)) values:")) {
+                        ForEach(activeValues) { value in
+                            ValueRow(value: value, isActive: true)
+                        }
+                    }
+                }
+
+                // All Values Section (A-Z)
+                if !searchText.isEmpty {
+                    // When searching, show flat list
+                    Section(header: Text("ALL VALUES")) {
+                        ForEach(inactiveValues) { value in
+                            ValueRow(value: value, isActive: false)
+                        }
+                    }
+                } else {
+                    // When not searching, show grouped by letter
+                    Section(header: Text("ALL VALUES")) {
+                        ForEach(groupedInactiveValues, id: \.0) { letter, values in
+                            Section(header: Text(letter).font(.headline).foregroundColor(.black)) {
+                                ForEach(values) { value in
+                                    ValueRow(value: value, isActive: false)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Empty state
+                if dataManager.values.isEmpty {
+                    Section {
+                        VStack(spacing: 12) {
+                            Image(systemName: "star.circle")
+                                .font(.system(size: 48))
+                                .foregroundColor(.gray)
+                            Text("No values yet")
+                                .font(.headline)
+                            Text("Tap + to add a custom value")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                    }
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack {
+                        Text("MY VALUES")
+                            .font(.custom("Georgia-Bold", size: 36))
+                            .foregroundColor(.black)
+                            .offset(y: 15)
+
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, -160)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack(spacing: 16) {
+                        // Search button
+                        if !dataManager.values.isEmpty {
+                            Button(action: {
+                                showingSearch.toggle()
+                            }) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundColor(.black)
+                            }
+                        }
+
+                        // Add button
+                        Button(action: {
+                            showingAddCustomValue = true
+                        }) {
+                            Image(systemName: "plus")
+                                .foregroundColor(.black)
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showingAddCustomValue) {
+                AddCustomValueView()
+            }
+            .sheet(isPresented: $showingSearch) {
+                SearchValuesView(searchText: $searchText)
+            }
+        }
+    }
+}
+
+struct ValueRow: View {
+    @EnvironmentObject var dataManager: DataManager
+    let value: Value
+    let isActive: Bool
+    @State private var showingDefinition = false
+
+    var body: some View {
+        HStack {
+            // Value name - tap to see definition
+            Button(action: {
+                showingDefinition = true
+            }) {
+                Text(value.name)
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            // Activation toggle
+            Button(action: {
+                dataManager.toggleValueActive(value)
+            }) {
+                Image(systemName: value.isActive ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 24))
+                    .foregroundColor(value.isActive ? .black : .gray)
+            }
+            .buttonStyle(.plain)
+        }
+        .sheet(isPresented: $showingDefinition) {
+            ValueDetailView(value: value)
+        }
+    }
+}
+
+struct ValueDetailView: View {
+    @Environment(\.dismiss) var dismiss
+    let value: Value
+
+    var body: some View {
+        ZStack {
+            // Background
+            Color(red: 0.98, green: 0.98, blue: 0.98)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Close button
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.gray.opacity(0.5))
+                    }
+                    .padding(.top, 20)
+                    .padding(.trailing, 20)
+                }
+
+                // Content card
+                VStack(alignment: .leading, spacing: 24) {
+                    // Value name
+                    Text(value.name)
+                        .font(.system(size: 36, weight: .bold))
+                        .foregroundColor(.black)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // Decorative line
+                    Rectangle()
+                        .fill(Color.black)
+                        .frame(height: 2)
+                        .frame(maxWidth: 60)
+
+                    // Definition
+                    Text(value.definition)
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundColor(.black.opacity(0.7))
+                        .lineSpacing(8)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer()
+                }
+                .padding(32)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .background(Color.white)
+                .cornerRadius(20)
+                .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
+                .padding(.horizontal, 20)
+                .padding(.top, 60)
+                .padding(.bottom, 60)
+            }
+        }
+    }
+}
+
+// MARK: - History View (Tab 4)
+struct HistoryView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var showingExportShare = false
+    @State private var showingImportPicker = false
+    @State private var exportURL: URL?
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
+
+    var groupedEntries: [(year: Int, months: [(month: Int, entries: [HistoryEntry])])] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: dataManager.historyEntries) { entry in
+            calendar.component(.year, from: entry.date)
+        }
+
+        return grouped.map { year, entries in
+            let monthGrouped = Dictionary(grouping: entries) { entry in
+                calendar.component(.month, from: entry.date)
+            }
+            let months = monthGrouped.map { month, monthEntries in
+                (month: month, entries: monthEntries.sorted { $0.date > $1.date })
+            }.sorted { $0.month > $1.month }
+
+            return (year: year, months: months)
+        }.sorted { $0.year > $1.year }
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("Values I'm Serving")) {
+                    Button(action: exportData) {
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Export Data")
+                        }
+                    }
+
+                    Button(action: { showingImportPicker = true }) {
+                        HStack {
+                            Image(systemName: "square.and.arrow.down")
+                            Text("Import Data")
+                        }
+                    }
+                }
+
+                ForEach(groupedEntries, id: \.year) { yearGroup in
+                    Section(header: Text(String(yearGroup.year))) {
+                        ForEach(yearGroup.months, id: \.month) { monthGroup in
+                            DisclosureGroup(monthName(monthGroup.month)) {
+                                ForEach(monthGroup.entries) { entry in
+                                    HistoryEntryRow(entry: entry)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle(".analysis")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(".analysis")
+                        .font(.custom("Georgia", size: 24))
+                        .foregroundColor(.black)
+                }
+            }
+            .sheet(isPresented: $showingExportShare) {
+                if let url = exportURL {
+                    ShareSheet(items: [url])
+                }
+            }
+            .fileImporter(
+                isPresented: $showingImportPicker,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                handleImport(result: result)
+            }
+            .alert("Backup", isPresented: $showingAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(alertMessage)
+            }
+        }
+    }
+
+    func monthName(_ month: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM"
+        let date = Calendar.current.date(from: DateComponents(month: month))!
+        return formatter.string(from: date)
+    }
+
+    func exportData() {
+        if let url = BackupManager.shared.exportBackup(from: dataManager) {
+            exportURL = url
+            showingExportShare = true
+        } else {
+            alertMessage = "Failed to create backup file."
+            showingAlert = true
+        }
+    }
+
+    func handleImport(result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+
+            if !BackupManager.shared.validateBackup(from: url) {
+                alertMessage = "Invalid backup file format."
+                showingAlert = true
+                return
+            }
+
+            try BackupManager.shared.importBackup(from: url, into: dataManager)
+            alertMessage = "Data successfully imported!"
+            showingAlert = true
+        } catch {
+            alertMessage = "Import failed: \(error.localizedDescription)"
+            showingAlert = true
+        }
+    }
+}
+
+struct HistoryEntryRow: View {
+    @EnvironmentObject var dataManager: DataManager
+    let entry: HistoryEntry
+
+    var dayNumber: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd"
+        return formatter.string(from: entry.date)
+    }
+
+    var body: some View {
+        HStack {
+            Text(dayNumber)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.black)
+
+            VStack(alignment: .leading, spacing: 2) {
+                if !entry.completedRoutineIds.isEmpty {
+                    Text("\(entry.completedRoutineIds.count) routine items")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                }
+                if !entry.completedTaskIds.isEmpty {
+                    Text("\(entry.completedTaskIds.count) tasks completed")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                }
+            }
+
+            Spacer()
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                dataManager.deleteHistoryEntry(entry)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+}
+
+// MARK: - Add Task View
+struct AddTaskView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+
+    @State private var title = ""
+    @State private var dueDate = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: Date()) ?? Date()
+    @State private var selectedValueIds: Set<UUID> = []
+    @State private var isRecurring = false
+    @State private var recurringFrequency: RecurringFrequency = .none
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    TextField("What needs to be done?", text: $title)
+                        .font(.system(size: 17))
+                }
+
+                Section(header: Text("When do you want this done by?")) {
+                    DatePicker("Date", selection: $dueDate, displayedComponents: .date)
+                        .datePickerStyle(.wheel)
+                }
+
+                Section(header: Text("Important Values")) {
+                    ForEach(dataManager.activeValues) { value in
+                        Button(action: {
+                            if selectedValueIds.contains(value.id) {
+                                selectedValueIds.remove(value.id)
+                            } else {
+                                selectedValueIds.insert(value.id)
+                            }
+                        }) {
+                            HStack {
+                                Text(value.name)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                if selectedValueIds.contains(value.id) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.black)
+                                } else {
+                                    Image(systemName: "circle")
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Section {
+                    Toggle("Recurring", isOn: $isRecurring)
+                        .tint(.black)
+
+                    if isRecurring {
+                        Picker("Frequency", selection: $recurringFrequency) {
+                            ForEach(RecurringFrequency.allCases.filter { $0 != .none }, id: \.self) { freq in
+                                Text(freq.rawValue).tag(freq)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("New Task")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.black)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        addTask()
+                        dismiss()
+                    }
+                    .foregroundColor(.black)
+                    .disabled(title.isEmpty)
+                }
+            }
+        }
+    }
+
+    private func addTask() {
+        let task = Task(
+            title: title,
+            dueDate: dueDate,
+            valueIds: Array(selectedValueIds),
+            isRecurring: isRecurring,
+            recurringFrequency: isRecurring ? recurringFrequency : .none
+        )
+        dataManager.addTask(task)
+    }
+}
+
+// MARK: - Edit Task View
+struct EditTaskView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+    let task: Task
+
+    @State private var title: String
+    @State private var dueDate: Date
+    @State private var selectedValueIds: Set<UUID>
+    @State private var isRecurring: Bool
+    @State private var recurringFrequency: RecurringFrequency
+
+    init(task: Task) {
+        self.task = task
+        _title = State(initialValue: task.title)
+        _selectedValueIds = State(initialValue: Set(task.valueIds))
+        _isRecurring = State(initialValue: task.isRecurring)
+        _recurringFrequency = State(initialValue: task.recurringFrequency)
+        _dueDate = State(initialValue: task.dueDate ?? Date())
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    TextField("What needs to be done?", text: $title)
+                        .font(.system(size: 17))
+                }
+
+                Section(header: Text("When do you want this done by?")) {
+                    DatePicker("Date", selection: $dueDate, displayedComponents: .date)
+                        .datePickerStyle(.wheel)
+                }
+
+                Section(header: Text("Important Values")) {
+                    ForEach(dataManager.activeValues) { value in
+                        Button(action: {
+                            if selectedValueIds.contains(value.id) {
+                                selectedValueIds.remove(value.id)
+                            } else {
+                                selectedValueIds.insert(value.id)
+                            }
+                        }) {
+                            HStack {
+                                Text(value.name)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                if selectedValueIds.contains(value.id) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.black)
+                                } else {
+                                    Image(systemName: "circle")
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Section {
+                    Toggle("Recurring", isOn: $isRecurring)
+                        .tint(.black)
+
+                    if isRecurring {
+                        Picker("Frequency", selection: $recurringFrequency) {
+                            ForEach(RecurringFrequency.allCases.filter { $0 != .none }, id: \.self) { freq in
+                                Text(freq.rawValue).tag(freq)
+                            }
+                        }
+                    }
+                }
+
+                // Delete button at very bottom
+                Section {
+                    Button(role: .destructive, action: {
+                        dataManager.deleteTask(task)
+                        dismiss()
+                    }) {
+                        HStack {
+                            Spacer()
+                            Text("Delete Task")
+                            Spacer()
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Edit Task")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.black)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        updateTask()
+                        dismiss()
+                    }
+                    .foregroundColor(.black)
+                    .disabled(title.isEmpty)
+                }
+            }
+        }
+    }
+
+    private func updateTask() {
+        var updatedTask = task  // Start with original task to preserve all properties
+
+        // Update only the fields that changed
+        updatedTask.title = title
+        updatedTask.dueDate = dueDate
+        updatedTask.valueIds = Array(selectedValueIds)
+        updatedTask.isRecurring = isRecurring
+        updatedTask.recurringFrequency = isRecurring ? recurringFrequency : .none
+
+        dataManager.updateTask(updatedTask)
+    }
+}
+
+// MARK: - Add Routine Item View
+struct AddRoutineItemView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+
+    @State private var title = ""
+    @State private var startTime = Date()
+    @State private var durationHours: Int = 1
+    @State private var durationMinutes: Int = 0
+    @State private var showingStartTimePicker = false
+    @State private var showingDurationPicker = false
+    @State private var selectedIcon = "checkmark.circle"
+    @State private var selectedValueIds: Set<UUID> = []
+    @State private var notificationEnabled = false
+    @State private var selectedDays: Set<Int> = []
+
+    let commonIcons = [
+        "checkmark.circle", "star.fill", "heart.fill", "moon.fill", "sun.max.fill",
+        "book.fill", "pencil", "person.fill", "house.fill", "leaf.fill",
+        "cup.and.saucer.fill", "dumbbell.fill", "brain.head.profile", "music.note"
+    ]
+
+    var startTimeString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: startTime)
+    }
+
+    var durationString: String {
+        if durationHours == 0 && durationMinutes == 0 {
+            return "Not set"
+        }
+        var parts: [String] = []
+        if durationHours > 0 {
+            parts.append("\(durationHours) hr")
+        }
+        if durationMinutes > 0 {
+            parts.append("\(durationMinutes) min")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    TextField("Routine item", text: $title)
+                        .font(.system(size: 17))
+                }
+
+                Section(header: Text("Time")) {
+                    Button(action: {
+                        withAnimation {
+                            showingStartTimePicker.toggle()
+                        }
+                    }) {
+                        HStack {
+                            Text("Start Time")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text(startTimeString)
+                                .foregroundColor(.secondary)
+                            Image(systemName: showingStartTimePicker ? "chevron.up" : "chevron.down")
+                                .foregroundColor(.gray)
+                                .font(.system(size: 14))
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if showingStartTimePicker {
+                        DatePicker("", selection: $startTime, displayedComponents: .hourAndMinute)
+                            .datePickerStyle(.wheel)
+                            .labelsHidden()
+                            .frame(height: 120)
+                    }
+
+                    Button(action: {
+                        withAnimation {
+                            showingDurationPicker.toggle()
+                        }
+                    }) {
+                        HStack {
+                            Text("How long?")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text(durationString)
+                                .foregroundColor(.secondary)
+                            Image(systemName: showingDurationPicker ? "chevron.up" : "chevron.down")
+                                .foregroundColor(.gray)
+                                .font(.system(size: 14))
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if showingDurationPicker {
+                        HStack(spacing: 0) {
+                            Picker("", selection: $durationHours) {
+                                ForEach(0..<24) { hour in
+                                    Text("\(hour)").tag(hour)
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(width: 80, height: 120)
+                            .clipped()
+
+                            Text("hr")
+                                .foregroundColor(.primary)
+                                .padding(.horizontal, 8)
+
+                            Picker("", selection: $durationMinutes) {
+                                ForEach([0, 15, 30, 45], id: \.self) { minute in
+                                    Text("\(minute)").tag(minute)
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(width: 80, height: 120)
+                            .clipped()
+
+                            Text("min")
+                                .foregroundColor(.primary)
+                                .padding(.horizontal, 8)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+
+                Section(header: Text("Active Days")) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 40))], spacing: 12) {
+                        ForEach(0..<7) { day in
+                            let dayName = ["S", "M", "T", "W", "T", "F", "S"][day]
+                            Button(action: {
+                                if selectedDays.contains(day) {
+                                    selectedDays.remove(day)
+                                } else {
+                                    selectedDays.insert(day)
+                                }
+                            }) {
+                                Text(dayName)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(selectedDays.contains(day) ? .white : .black)
+                                    .frame(width: 40, height: 40)
+                                    .background(selectedDays.contains(day) ? Color.black : Color.gray.opacity(0.2))
+                                    .cornerRadius(20)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+
+                Section {
+                    Toggle("Enable Notifications", isOn: $notificationEnabled)
+                        .tint(.black)
+                }
+
+                Section {
+                    DisclosureGroup {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 50))], spacing: 16) {
+                            ForEach(commonIcons, id: \.self) { icon in
+                                Button(action: {
+                                    selectedIcon = icon
+                                }) {
+                                    Image(systemName: icon)
+                                        .font(.system(size: 24))
+                                        .foregroundColor(selectedIcon == icon ? .white : .black)
+                                        .frame(width: 50, height: 50)
+                                        .background(selectedIcon == icon ? Color.black : Color.gray.opacity(0.2))
+                                        .cornerRadius(8)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    } label: {
+                        HStack {
+                            Text("Icon")
+                            Spacer()
+                            Image(systemName: selectedIcon)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
+                Section {
+                    DisclosureGroup("Important Values") {
+                        ForEach(dataManager.activeValues.sorted { $0.name < $1.name }) { value in
+                            Button(action: {
+                                if selectedValueIds.contains(value.id) {
+                                    selectedValueIds.remove(value.id)
+                                } else {
+                                    selectedValueIds.insert(value.id)
+                                }
+                            }) {
+                                HStack {
+                                    Text(value.name)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    if selectedValueIds.contains(value.id) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.black)
+                                    } else {
+                                        Image(systemName: "circle")
+                                            .foregroundColor(.gray)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("New Routine Item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.black)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        addRoutineItem()
+                        dismiss()
+                    }
+                    .foregroundColor(.black)
+                    .disabled(title.isEmpty || selectedDays.isEmpty)
+                }
+            }
+        }
+    }
+
+    private func addRoutineItem() {
+        let calendar = Calendar.current
+
+        // Calculate endTime from startTime + duration
+        let totalMinutes = (durationHours * 60) + durationMinutes
+        guard let endTime = calendar.date(byAdding: .minute, value: totalMinutes, to: startTime) else { return }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+
+        let startTimeString = formatter.string(from: startTime)
+        let endTimeString = formatter.string(from: endTime)
+        let timeString = "\(startTimeString) - \(endTimeString)"
+
+        let notifHour = notificationEnabled ? calendar.component(.hour, from: startTime) : nil
+        let notifMinute = notificationEnabled ? calendar.component(.minute, from: startTime) : nil
+
+        let item = RoutineItem(
+            title: title,
+            time: timeString,
+            icon: selectedIcon,
+            valueIds: Array(selectedValueIds),
+            notificationEnabled: notificationEnabled,
+            notificationHour: notifHour,
+            notificationMinute: notifMinute,
+            startTime: startTime,
+            endTime: endTime,
+            activeDays: selectedDays.isEmpty ? nil : Array(selectedDays).sorted()
+        )
+        dataManager.addRoutineItem(item)
+    }
+}
+
+// MARK: - Edit Routine Item View
+struct EditRoutineItemView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+    let item: RoutineItem
+
+    @State private var title: String
+    @State private var startTime: Date
+    @State private var durationHours: Int
+    @State private var durationMinutes: Int
+    @State private var showingStartTimePicker = false
+    @State private var showingDurationPicker = false
+    @State private var selectedIcon: String
+    @State private var selectedValueIds: Set<UUID>
+    @State private var notificationEnabled: Bool
+    @State private var selectedDays: Set<Int>
+
+    let commonIcons = [
+        "checkmark.circle", "star.fill", "heart.fill", "moon.fill", "sun.max.fill",
+        "book.fill", "pencil", "person.fill", "house.fill", "leaf.fill",
+        "cup.and.saucer.fill", "dumbbell.fill", "brain.head.profile", "music.note"
+    ]
+
+    init(item: RoutineItem) {
+        self.item = item
+        _title = State(initialValue: item.title)
+        _selectedIcon = State(initialValue: item.icon)
+        _selectedValueIds = State(initialValue: Set(item.valueIds))
+        _notificationEnabled = State(initialValue: item.notificationEnabled)
+        _startTime = State(initialValue: item.startTime ?? Date())
+        _selectedDays = State(initialValue: Set(item.activeDays ?? []))
+
+        // Calculate duration from existing start/end times
+        if let start = item.startTime, let end = item.endTime {
+            let duration = Calendar.current.dateComponents([.hour, .minute], from: start, to: end)
+            _durationHours = State(initialValue: duration.hour ?? 1)
+            _durationMinutes = State(initialValue: duration.minute ?? 0)
+        } else {
+            _durationHours = State(initialValue: 1)
+            _durationMinutes = State(initialValue: 0)
+        }
+    }
+
+    var startTimeString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: startTime)
+    }
+
+    var durationString: String {
+        if durationHours == 0 && durationMinutes == 0 {
+            return "Not set"
+        }
+        var parts: [String] = []
+        if durationHours > 0 {
+            parts.append("\(durationHours) hr")
+        }
+        if durationMinutes > 0 {
+            parts.append("\(durationMinutes) min")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    TextField("Routine item", text: $title)
+                        .font(.system(size: 17))
+                }
+
+                Section(header: Text("Time")) {
+                    Button(action: {
+                        withAnimation {
+                            showingStartTimePicker.toggle()
+                        }
+                    }) {
+                        HStack {
+                            Text("Start Time")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text(startTimeString)
+                                .foregroundColor(.secondary)
+                            Image(systemName: showingStartTimePicker ? "chevron.up" : "chevron.down")
+                                .foregroundColor(.gray)
+                                .font(.system(size: 14))
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if showingStartTimePicker {
+                        DatePicker("", selection: $startTime, displayedComponents: .hourAndMinute)
+                            .datePickerStyle(.wheel)
+                            .labelsHidden()
+                            .frame(height: 120)
+                    }
+
+                    Button(action: {
+                        withAnimation {
+                            showingDurationPicker.toggle()
+                        }
+                    }) {
+                        HStack {
+                            Text("How long?")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text(durationString)
+                                .foregroundColor(.secondary)
+                            Image(systemName: showingDurationPicker ? "chevron.up" : "chevron.down")
+                                .foregroundColor(.gray)
+                                .font(.system(size: 14))
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if showingDurationPicker {
+                        HStack(spacing: 0) {
+                            Picker("", selection: $durationHours) {
+                                ForEach(0..<24) { hour in
+                                    Text("\(hour)").tag(hour)
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(width: 80, height: 120)
+                            .clipped()
+
+                            Text("hr")
+                                .foregroundColor(.primary)
+                                .padding(.horizontal, 8)
+
+                            Picker("", selection: $durationMinutes) {
+                                ForEach([0, 15, 30, 45], id: \.self) { minute in
+                                    Text("\(minute)").tag(minute)
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(width: 80, height: 120)
+                            .clipped()
+
+                            Text("min")
+                                .foregroundColor(.primary)
+                                .padding(.horizontal, 8)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+
+                Section(header: Text("Active Days")) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 40))], spacing: 12) {
+                        ForEach(0..<7) { day in
+                            let dayName = ["S", "M", "T", "W", "T", "F", "S"][day]
+                            Button(action: {
+                                if selectedDays.contains(day) {
+                                    selectedDays.remove(day)
+                                } else {
+                                    selectedDays.insert(day)
+                                }
+                            }) {
+                                Text(dayName)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(selectedDays.contains(day) ? .white : .black)
+                                    .frame(width: 40, height: 40)
+                                    .background(selectedDays.contains(day) ? Color.black : Color.gray.opacity(0.2))
+                                    .cornerRadius(20)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+
+                Section {
+                    Toggle("Enable Notifications", isOn: $notificationEnabled)
+                        .tint(.black)
+                }
+
+                Section {
+                    DisclosureGroup {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 50))], spacing: 16) {
+                            ForEach(commonIcons, id: \.self) { icon in
+                                Button(action: {
+                                    selectedIcon = icon
+                                }) {
+                                    Image(systemName: icon)
+                                        .font(.system(size: 24))
+                                        .foregroundColor(selectedIcon == icon ? .white : .black)
+                                        .frame(width: 50, height: 50)
+                                        .background(selectedIcon == icon ? Color.black : Color.gray.opacity(0.2))
+                                        .cornerRadius(8)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    } label: {
+                        HStack {
+                            Text("Icon")
+                            Spacer()
+                            Image(systemName: selectedIcon)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
+                Section {
+                    DisclosureGroup("Important Values") {
+                        ForEach(dataManager.activeValues.sorted { $0.name < $1.name }) { value in
+                            Button(action: {
+                                if selectedValueIds.contains(value.id) {
+                                    selectedValueIds.remove(value.id)
+                                } else {
+                                    selectedValueIds.insert(value.id)
+                                }
+                            }) {
+                                HStack {
+                                    Text(value.name)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    if selectedValueIds.contains(value.id) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.black)
+                                    } else {
+                                        Image(systemName: "circle")
+                                            .foregroundColor(.gray)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                // Delete button at very bottom
+                Section {
+                    Button(role: .destructive, action: {
+                        dataManager.deleteRoutineItem(item)
+                        dismiss()
+                    }) {
+                        HStack {
+                            Spacer()
+                            Text("Delete Routine Item")
+                            Spacer()
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Edit Routine Item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.black)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        updateRoutineItem()
+                        dismiss()
+                    }
+                    .foregroundColor(.black)
+                    .disabled(title.isEmpty || selectedDays.isEmpty)
+                }
+            }
+        }
+    }
+
+    private func updateRoutineItem() {
+        let calendar = Calendar.current
+
+        // Calculate endTime from startTime + duration
+        let totalMinutes = (durationHours * 60) + durationMinutes
+        guard let endTime = calendar.date(byAdding: .minute, value: totalMinutes, to: startTime) else { return }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+
+        let startTimeString = formatter.string(from: startTime)
+        let endTimeString = formatter.string(from: endTime)
+        let timeString = "\(startTimeString) - \(endTimeString)"
+
+        let notifHour = notificationEnabled ? calendar.component(.hour, from: startTime) : nil
+        let notifMinute = notificationEnabled ? calendar.component(.minute, from: startTime) : nil
+
+        let updatedItem = RoutineItem(
+            id: item.id,
+            title: title,
+            time: timeString,
+            icon: selectedIcon,
+            valueIds: Array(selectedValueIds),
+            notificationEnabled: notificationEnabled,
+            notificationHour: notifHour,
+            notificationMinute: notifMinute,
+            startTime: startTime,
+            endTime: endTime,
+            activeDays: selectedDays.isEmpty ? nil : Array(selectedDays).sorted()
+        )
+        dataManager.updateRoutineItem(updatedItem)
+    }
+}
+
+// MARK: - Search Values View
+struct SearchValuesView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+    @Binding var searchText: String
+    @FocusState private var isSearchFocused: Bool
+
+    var filteredValues: [Value] {
+        if searchText.isEmpty {
+            return dataManager.values.sorted { $0.name < $1.name }
+        } else {
+            return dataManager.values.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText)
+            }.sorted { $0.name < $1.name }
+        }
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                ForEach(filteredValues) { value in
+                    ValueRow(value: value, isActive: value.isActive)
+                }
+            }
+            .navigationTitle("Search Values")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.black)
+                }
+            }
+        }
+        .onAppear {
+            isSearchFocused = true
+        }
+    }
+}
+
+// MARK: - Add Custom Value View
+struct AddCustomValueView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+
+    @State private var name = ""
+    @State private var definition = ""
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Value Name")) {
+                    TextField("e.g., Mindfulness", text: $name)
+                        .font(.system(size: 17))
+                }
+
+                Section(header: Text("Definition")) {
+                    TextEditor(text: $definition)
+                        .frame(minHeight: 100)
+                        .font(.system(size: 15))
+                }
+            }
+            .navigationTitle("New Custom Value")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.black)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        dataManager.addCustomValue(name: name, definition: definition)
+                        dismiss()
+                    }
+                    .foregroundColor(.black)
+                    .disabled(name.isEmpty || definition.isEmpty)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Share Sheet Helper
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
