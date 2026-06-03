@@ -745,6 +745,87 @@ struct ToDoView: View {
     @EnvironmentObject var locationManager: LocationManager
     @State private var showingAddTask = false
     @State private var showingUrgencyHelp = false
+    @State private var isOverdueExpanded = true
+    @State private var pendingCompletionIds: Set<UUID> = []
+    @State private var pendingSnoozeIds: Set<UUID> = []
+    @State private var showingUndoToast = false
+    @State private var undoTimer: Timer? = nil
+    @State private var pendingCompletionTask: Task? = nil
+
+    var visibleOverdueTasks: [Task] {
+        dataManager.overdueTasks.filter {
+            !pendingCompletionIds.contains($0.id) && !pendingSnoozeIds.contains($0.id)
+        }
+    }
+
+    var visibleActiveTasks: [Task] {
+        dataManager.activeNonOverdueTasks.filter {
+            !pendingCompletionIds.contains($0.id) && !pendingSnoozeIds.contains($0.id)
+        }
+    }
+
+    func completeTaskAction(_ task: Task) {
+        finalizeAnyPendingCompletion()
+
+        withAnimation(.easeInOut(duration: 0.3)) {
+            pendingCompletionIds.insert(task.id)
+            pendingCompletionTask = task
+            showingUndoToast = true
+        }
+
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+
+        undoTimer?.invalidate()
+        undoTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+            finalizeCompletion()
+        }
+    }
+
+    func finalizeCompletion() {
+        undoTimer?.invalidate()
+        if let task = pendingCompletionTask {
+            dataManager.completeTask(task)
+        }
+        withAnimation {
+            pendingCompletionIds.removeAll()
+            pendingCompletionTask = nil
+            showingUndoToast = false
+        }
+    }
+
+    func finalizeAnyPendingCompletion() {
+        if let task = pendingCompletionTask {
+            undoTimer?.invalidate()
+            dataManager.completeTask(task)
+            pendingCompletionIds.remove(task.id)
+            pendingCompletionTask = nil
+            showingUndoToast = false
+        }
+    }
+
+    func undoCompletion() {
+        undoTimer?.invalidate()
+        withAnimation(.easeInOut(duration: 0.3)) {
+            if let task = pendingCompletionTask {
+                _ = pendingCompletionIds.remove(task.id)
+            }
+            pendingCompletionTask = nil
+            showingUndoToast = false
+        }
+    }
+
+    func snoozeTaskAction(_ task: Task) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            pendingSnoozeIds.insert(task.id)
+        }
+        dataManager.snoozeTask(task, days: 1)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                _ = pendingSnoozeIds.remove(task.id)
+            }
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -829,7 +910,7 @@ struct ToDoView: View {
                 .padding(.bottom, 12)
                 .background(Color(uiColor: .secondarySystemBackground))
 
-                if dataManager.overdueTasks.isEmpty && dataManager.activeNonOverdueTasks.isEmpty {
+                if visibleOverdueTasks.isEmpty && visibleActiveTasks.isEmpty && pendingCompletionIds.isEmpty {
                     // Empty State
                     VStack(spacing: 20) {
                         Image(systemName: "checkmark.circle")
@@ -859,21 +940,34 @@ struct ToDoView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .transition(.opacity)
-                    .animation(.easeIn(duration: 0.3), value: dataManager.overdueTasks.isEmpty && dataManager.activeNonOverdueTasks.isEmpty)
+                    .animation(.easeIn(duration: 0.3), value: visibleOverdueTasks.isEmpty && visibleActiveTasks.isEmpty)
                 } else {
                     List {
-                        // Overdue Section
-                        if !dataManager.overdueTasks.isEmpty {
-                            Section {
-                                OverdueSection(tasks: dataManager.overdueTasks)
-                            }
-                            .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.clear)
+                        // Overdue header row
+                        if !visibleOverdueTasks.isEmpty {
+                            OverdueHeaderRow(count: visibleOverdueTasks.count, isExpanded: $isOverdueExpanded)
+                                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
                         }
 
-                        // Active Tasks (Gradient)
-                        ForEach(dataManager.activeNonOverdueTasks) { task in
-                            TaskCard(task: task)
+                        // Overdue tasks (if expanded)
+                        if isOverdueExpanded {
+                            ForEach(visibleOverdueTasks) { task in
+                                TaskCard(task: task, isOverdue: true,
+                                         onComplete: { completeTaskAction(task) },
+                                         onSnooze: { snoozeTaskAction(task) })
+                                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                            }
+                        }
+
+                        // Active tasks
+                        ForEach(visibleActiveTasks) { task in
+                            TaskCard(task: task,
+                                     onComplete: { completeTaskAction(task) },
+                                     onSnooze: { snoozeTaskAction(task) })
                                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
@@ -913,6 +1007,38 @@ struct ToDoView: View {
                     .padding(.bottom, 20)
                 }
             }
+
+            // Undo Toast (ToDoView level — survives task removal)
+            if showingUndoToast, let pendingTask = pendingCompletionTask {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Text("'\(pendingTask.title)' completed")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+
+                        Spacer()
+
+                        Button(action: undoCompletion) {
+                            Text("UNDO")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.yellow)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.black.opacity(0.9))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 90)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(100)
+            }
+        }
+        .onDisappear {
+            finalizeAnyPendingCompletion()
         }
         .sheet(isPresented: $showingAddTask) {
             AddTaskView()
@@ -920,44 +1046,31 @@ struct ToDoView: View {
     }
 }
 
-struct OverdueSection: View {
-    let tasks: [Task]
-    @State private var isExpanded = true
+struct OverdueHeaderRow: View {
+    let count: Int
+    @Binding var isExpanded: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            Button(action: {
-                withAnimation {
-                    isExpanded.toggle()
-                }
-            }) {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.red)
-                    Text("OVERDUE · \(tasks.count)")
-                        .font(.system(size: 14))
-                        .foregroundColor(.red)
-                    Spacer()
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .foregroundColor(.gray)
-                }
-                .padding()
-                .background(Color.red.opacity(0.1))
-                .cornerRadius(8)
+        Button(action: {
+            withAnimation {
+                isExpanded.toggle()
             }
-
-            // Tasks
-            if isExpanded {
-                VStack(spacing: 8) {
-                    ForEach(tasks) { task in
-                        TaskCard(task: task, isOverdue: true)
-                            .transition(.asymmetric(insertion: .move(edge: .leading).combined(with: .opacity), removal: .move(edge: .trailing).combined(with: .opacity)))
-                    }
-                }
-                .padding(.top, 8)
+        }) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.red)
+                Text("OVERDUE · \(count)")
+                    .font(.system(size: 14))
+                    .foregroundColor(.red)
+                Spacer()
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .foregroundColor(.gray)
             }
+            .padding()
+            .background(Color.red.opacity(0.1))
+            .cornerRadius(8)
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -965,12 +1078,12 @@ struct TaskCard: View {
     @EnvironmentObject var dataManager: DataManager
     let task: Task
     var isOverdue: Bool = false
+    var onComplete: () -> Void = {}
+    var onSnooze: () -> Void = {}
     @State private var showingValuesToast = false
     @State private var showingEditSheet = false
-    @State private var showingUndoToast = false
-    @State private var undoTimer: Timer?
-    @State private var completedTaskSnapshot: Task?
-    @State private var isPressed = false
+    @State private var dragOffset: CGFloat = 0
+    @State private var isDragging = false
 
     var valueNames: String {
         let names = task.valueIds.compactMap { valueId in
@@ -1015,128 +1128,152 @@ struct TaskCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(task.title)
-                    .font(.system(size: 16, weight: task.isAppointment ? .bold : .regular))
-                    .foregroundColor(textColor)
-
-                Text(dueDateText)
-                    .font(.system(size: 13))
-                    .foregroundColor(textColor.opacity(0.8))
-
-                // Show location if appointment has one
-                if task.isAppointment, let location = task.location, !location.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(textColor.opacity(0.7))
-                        Text(location)
-                            .font(.system(size: 12))
-                            .foregroundColor(textColor.opacity(0.7))
-                    }
+        ZStack {
+            // Background layer revealed during swipe
+            if dragOffset > 0 {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.white)
+                        .scaleEffect(min(abs(dragOffset) / 80.0 * 0.5 + 0.5, 1.0))
+                        .opacity(min(abs(dragOffset) / 80.0 * 0.7 + 0.3, 1.0))
+                        .padding(.leading, 20)
+                    Spacer()
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.green)
+                .cornerRadius(12)
+            } else if dragOffset < 0 && !task.isAppointment {
+                HStack {
+                    Spacer()
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 24))
+                        .foregroundColor(.white)
+                        .scaleEffect(min(abs(dragOffset) / 80.0 * 0.5 + 0.5, 1.0))
+                        .opacity(min(abs(dragOffset) / 80.0 * 0.7 + 0.3, 1.0))
+                        .padding(.trailing, 20)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.blue)
+                .cornerRadius(12)
+            }
 
-                // Show dots + info icon for values
-                if !task.valueIds.isEmpty {
-                    HStack(spacing: 4) {
-                        ForEach(0..<task.valueIds.count, id: \.self) { _ in
-                            Circle()
-                                .fill(textColor)
-                                .frame(width: 6, height: 6)
-                        }
+            // Card content
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(task.title)
+                        .font(.system(size: 16, weight: task.isAppointment ? .bold : .regular))
+                        .foregroundColor(textColor)
 
-                        Button(action: {
-                            showingValuesToast = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                                showingValuesToast = false
-                            }
-                        }) {
-                            Image(systemName: "info.circle")
-                                .font(.system(size: 14))
+                    Text(dueDateText)
+                        .font(.system(size: 13))
+                        .foregroundColor(textColor.opacity(0.8))
+
+                    // Show location if appointment has one
+                    if task.isAppointment, let location = task.location, !location.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(textColor.opacity(0.7))
+                            Text(location)
+                                .font(.system(size: 12))
                                 .foregroundColor(textColor.opacity(0.7))
                         }
-                        .buttonStyle(.plain)
+                    }
+
+                    // Show dots + info icon for values
+                    if !task.valueIds.isEmpty {
+                        HStack(spacing: 4) {
+                            ForEach(0..<task.valueIds.count, id: \.self) { _ in
+                                Circle()
+                                    .fill(textColor)
+                                    .frame(width: 6, height: 6)
+                            }
+
+                            Button(action: {
+                                showingValuesToast = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                    showingValuesToast = false
+                                }
+                            }) {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(textColor.opacity(0.7))
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
-            }
 
-            Spacer()
+                Spacer()
 
-            // Days remaining counter on the right
-            if let days = task.daysUntilDue {
-                VStack(alignment: .center, spacing: 2) {
-                    Text("Days rem:")
-                        .font(.system(size: 11))
-                        .foregroundColor(textColor.opacity(0.7))
-                    Text("\(days)")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(textColor)
+                // Days remaining counter on the right
+                if let days = task.daysUntilDue {
+                    VStack(alignment: .center, spacing: 2) {
+                        Text("Days rem:")
+                            .font(.system(size: 11))
+                            .foregroundColor(textColor.opacity(0.7))
+                        Text("\(days)")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(textColor)
+                    }
+                    .frame(minWidth: 60, alignment: .trailing)
+                    .padding(.top, 2)
                 }
-                .frame(minWidth: 60, alignment: .trailing)
-                .padding(.top, 2)
             }
-        }
-        .padding(16)
-        .background(backgroundColor)
-        .cornerRadius(12)
-        .scaleEffect(isPressed ? 0.97 : 1.0)
-        .opacity(isPressed ? 0.8 : 1.0)
-        .animation(.easeOut(duration: 0.15), value: isPressed)
-        .onTapGesture {
-            showingEditSheet = true
-        }
-        .onLongPressGesture(minimumDuration: .infinity, maximumDistance: .infinity, pressing: { pressing in
-            isPressed = pressing
-        }, perform: {})
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(action: {
-                completeTaskWithUndo()
-            }) {
-                Label("Complete", systemImage: "checkmark")
+            .padding(16)
+            .background(backgroundColor)
+            .cornerRadius(12)
+            .offset(x: dragOffset)
+            .onTapGesture {
+                showingEditSheet = true
             }
-            .tint(.green)
-        }
-        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            if !task.isAppointment {
-                Button(action: {
-                    dataManager.snoozeTask(task, days: 1)
-                }) {
-                    Label("Snooze", systemImage: "clock.arrow.circlepath")
-                }
-                .tint(.blue)
-            }
+            .gesture(
+                DragGesture(minimumDistance: 20)
+                    .onChanged { value in
+                        let translation = value.translation.width
+                        if translation > 0 {
+                            dragOffset = translation
+                        } else if !task.isAppointment {
+                            dragOffset = translation
+                        }
+
+                        if !isDragging && abs(translation) > 80 {
+                            isDragging = true
+                            let impact = UIImpactFeedbackGenerator(style: .medium)
+                            impact.impactOccurred()
+                        }
+                        if isDragging && abs(translation) < 80 {
+                            isDragging = false
+                        }
+                    }
+                    .onEnded { value in
+                        let translation = value.translation.width
+                        if translation > 80 {
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                dragOffset = UIScreen.main.bounds.width
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                onComplete()
+                            }
+                        } else if translation < -80 && !task.isAppointment {
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                dragOffset = -UIScreen.main.bounds.width
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                onSnooze()
+                            }
+                        } else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                dragOffset = 0
+                            }
+                        }
+                        isDragging = false
+                    }
+            )
         }
         .overlay(
             Group {
-                // Undo Toast
-                if showingUndoToast {
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Text("Task marked complete")
-                                .font(.system(size: 14))
-                                .foregroundColor(.white)
-
-                            Spacer()
-
-                            Button(action: undoTaskCompletion) {
-                                Text("UNDO")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(Color.black.opacity(0.9))
-                        .cornerRadius(8)
-                        .padding(.horizontal)
-                        .padding(.bottom, 80)
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .animation(.easeInOut(duration: 0.3), value: showingUndoToast)
-                }
-
                 // Values info toast
                 if showingValuesToast {
                     VStack {
@@ -1155,9 +1292,6 @@ struct TaskCard: View {
                 }
             }
         )
-        .onDisappear {
-            undoTimer?.invalidate()
-        }
         .sheet(isPresented: $showingEditSheet) {
             EditTaskView(task: task)
         }
@@ -1206,48 +1340,6 @@ struct TaskCard: View {
         }
     }
 
-    // MARK: - Undo Helper Methods
-    func completeTaskWithUndo() {
-        completedTaskSnapshot = task
-        dataManager.completeTask(task)
-
-        // Success haptic feedback
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-
-        showUndoToast()
-    }
-
-    func showUndoToast() {
-        // Cancel existing timer
-        undoTimer?.invalidate()
-
-        withAnimation {
-            showingUndoToast = true
-        }
-
-        // Auto-dismiss after 5 seconds
-        undoTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
-            withAnimation {
-                showingUndoToast = false
-            }
-            completedTaskSnapshot = nil
-        }
-    }
-
-    func undoTaskCompletion() {
-        undoTimer?.invalidate()
-
-        withAnimation {
-            showingUndoToast = false
-        }
-
-        // Restore the task back to active tasks
-        if let snapshot = completedTaskSnapshot {
-            dataManager.uncompleteTask(snapshot)
-            completedTaskSnapshot = nil
-        }
-    }
 }
 
 // MARK: - Values View (Tab 3)
