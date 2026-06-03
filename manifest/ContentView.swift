@@ -3,6 +3,30 @@ import CoreLocation
 import MapKit
 import UserNotifications
 
+// MARK: - Custom Tab Icons
+
+private extension UIImage {
+    /// Stroke-path "V" rendered at screen scale so it matches the visual weight
+    /// of the other outline tab icons (gearshape, checklist, chart.bar.xaxis).
+    static let vTabIcon: UIImage = {
+        let size = CGSize(width: 26, height: 20)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 0 // native screen scale
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { ctx in
+            let path = UIBezierPath()
+            path.move(to: CGPoint(x: 2, y: 1.5))
+            path.addLine(to: CGPoint(x: 13, y: 18.5))
+            path.addLine(to: CGPoint(x: 24, y: 1.5))
+            path.lineWidth = 2.0
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            UIColor.black.setStroke()
+            path.stroke()
+        }
+        return image.withRenderingMode(.alwaysTemplate)
+    }()
+}
+
 // MARK: - Main Content View with 4 Tabs
 struct ContentView: View {
     @EnvironmentObject var dataManager: DataManager
@@ -30,7 +54,7 @@ struct ContentView: View {
 
                 ValuesView()
                     .tabItem {
-                        Image(systemName: "v.circle")
+                        Image(uiImage: .vTabIcon)
                     }
                     .tag(2)
                     .accessibilityLabel("Values tab")
@@ -806,10 +830,11 @@ struct ToDoView: View {
 
     func undoCompletion() {
         undoTimer?.invalidate()
+        if let task = pendingCompletionTask {
+            pendingCompletionIds.remove(task.id)
+            dataManager.uncompleteTask(task)
+        }
         withAnimation(.easeInOut(duration: 0.3)) {
-            if let task = pendingCompletionTask {
-                _ = pendingCompletionIds.remove(task.id)
-            }
             pendingCompletionTask = nil
             showingUndoToast = false
         }
@@ -817,7 +842,7 @@ struct ToDoView: View {
 
     func snoozeTaskAction(_ task: Task) {
         withAnimation(.easeInOut(duration: 0.3)) {
-            pendingSnoozeIds.insert(task.id)
+            _ = pendingSnoozeIds.insert(task.id)
         }
         dataManager.snoozeTask(task, days: 1)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
@@ -1082,8 +1107,6 @@ struct TaskCard: View {
     var onSnooze: () -> Void = {}
     @State private var showingValuesToast = false
     @State private var showingEditSheet = false
-    @State private var dragOffset: CGFloat = 0
-    @State private var isDragging = false
 
     var valueNames: String {
         let names = task.valueIds.compactMap { valueId in
@@ -1101,24 +1124,16 @@ struct TaskCard: View {
             return Color.gray.opacity(0.1)
         }
 
-        // Gradient: 0 days = red, 14+ days = green (soft, transparent versions)
+        // Color bands match the "?" legend: Red 0-2, Orange 3-6, Yellow 7-9, Green 10+
         switch days {
-        case 0:
-            return Color.red.opacity(0.2) // Soft red
-        case 1:
-            return Color.red.opacity(0.18) // Soft red
-        case 2:
-            return Color.orange.opacity(0.18) // Soft red-orange
-        case 3...4:
-            return Color.orange.opacity(0.16) // Soft orange
-        case 5...6:
-            return Color.yellow.opacity(0.18) // Soft yellow
+        case 0...2:
+            return Color.red.opacity(0.18)
+        case 3...6:
+            return Color.orange.opacity(0.17)
         case 7...9:
-            return Color.green.opacity(0.15) // Soft yellow-green
-        case 10...13:
-            return Color.green.opacity(0.14) // Soft green
+            return Color.yellow.opacity(0.18)
         default:
-            return Color.green.opacity(0.12) // Soft deep green
+            return Color.green.opacity(0.13)
         }
     }
 
@@ -1128,149 +1143,87 @@ struct TaskCard: View {
     }
 
     var body: some View {
-        ZStack {
-            // Background layer revealed during swipe
-            if dragOffset > 0 {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.white)
-                        .scaleEffect(min(abs(dragOffset) / 80.0 * 0.5 + 0.5, 1.0))
-                        .opacity(min(abs(dragOffset) / 80.0 * 0.7 + 0.3, 1.0))
-                        .padding(.leading, 20)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.green)
-                .cornerRadius(12)
-            } else if dragOffset < 0 && !task.isAppointment {
-                HStack {
-                    Spacer()
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 24))
-                        .foregroundColor(.white)
-                        .scaleEffect(min(abs(dragOffset) / 80.0 * 0.5 + 0.5, 1.0))
-                        .opacity(min(abs(dragOffset) / 80.0 * 0.7 + 0.3, 1.0))
-                        .padding(.trailing, 20)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.blue)
-                .cornerRadius(12)
-            }
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.title)
+                    .font(.system(size: 16, weight: task.isAppointment ? .bold : .regular))
+                    .foregroundColor(textColor)
 
-            // Card content
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(task.title)
-                        .font(.system(size: 16, weight: task.isAppointment ? .bold : .regular))
-                        .foregroundColor(textColor)
+                Text(dueDateText)
+                    .font(.system(size: 13))
+                    .foregroundColor(textColor.opacity(0.8))
 
-                    Text(dueDateText)
-                        .font(.system(size: 13))
-                        .foregroundColor(textColor.opacity(0.8))
-
-                    // Show location if appointment has one
-                    if task.isAppointment, let location = task.location, !location.isEmpty {
-                        HStack(spacing: 4) {
-                            Image(systemName: "location.fill")
-                                .font(.system(size: 11))
-                                .foregroundColor(textColor.opacity(0.7))
-                            Text(location)
-                                .font(.system(size: 12))
-                                .foregroundColor(textColor.opacity(0.7))
-                        }
-                    }
-
-                    // Show dots + info icon for values
-                    if !task.valueIds.isEmpty {
-                        HStack(spacing: 4) {
-                            ForEach(0..<task.valueIds.count, id: \.self) { _ in
-                                Circle()
-                                    .fill(textColor)
-                                    .frame(width: 6, height: 6)
-                            }
-
-                            Button(action: {
-                                showingValuesToast = true
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                                    showingValuesToast = false
-                                }
-                            }) {
-                                Image(systemName: "info.circle")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(textColor.opacity(0.7))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                Spacer()
-
-                // Days remaining counter on the right
-                if let days = task.daysUntilDue {
-                    VStack(alignment: .center, spacing: 2) {
-                        Text("Days rem:")
+                // Show location if appointment has one
+                if task.isAppointment, let location = task.location, !location.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "location.fill")
                             .font(.system(size: 11))
                             .foregroundColor(textColor.opacity(0.7))
-                        Text("\(days)")
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(textColor)
+                        Text(location)
+                            .font(.system(size: 12))
+                            .foregroundColor(textColor.opacity(0.7))
                     }
-                    .frame(minWidth: 60, alignment: .trailing)
-                    .padding(.top, 2)
                 }
-            }
-            .padding(16)
-            .background(backgroundColor)
-            .cornerRadius(12)
-            .offset(x: dragOffset)
-            .onTapGesture {
-                showingEditSheet = true
-            }
-            .gesture(
-                DragGesture(minimumDistance: 20)
-                    .onChanged { value in
-                        let translation = value.translation.width
-                        if translation > 0 {
-                            dragOffset = translation
-                        } else if !task.isAppointment {
-                            dragOffset = translation
+
+                // Show dots + info icon for values
+                if !task.valueIds.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(0..<task.valueIds.count, id: \.self) { _ in
+                            Circle()
+                                .fill(textColor)
+                                .frame(width: 6, height: 6)
                         }
 
-                        if !isDragging && abs(translation) > 80 {
-                            isDragging = true
-                            let impact = UIImpactFeedbackGenerator(style: .medium)
-                            impact.impactOccurred()
+                        Button(action: {
+                            showingValuesToast = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                showingValuesToast = false
+                            }
+                        }) {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 14))
+                                .foregroundColor(textColor.opacity(0.7))
                         }
-                        if isDragging && abs(translation) < 80 {
-                            isDragging = false
-                        }
+                        .buttonStyle(.plain)
                     }
-                    .onEnded { value in
-                        let translation = value.translation.width
-                        if translation > 80 {
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                dragOffset = UIScreen.main.bounds.width
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                onComplete()
-                            }
-                        } else if translation < -80 && !task.isAppointment {
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                dragOffset = -UIScreen.main.bounds.width
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                onSnooze()
-                            }
-                        } else {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                dragOffset = 0
-                            }
-                        }
-                        isDragging = false
-                    }
-            )
+                }
+            }
+
+            Spacer()
+
+            // Days remaining counter on the right
+            if let days = task.daysUntilDue {
+                VStack(alignment: .center, spacing: 2) {
+                    Text("Days rem:")
+                        .font(.system(size: 11))
+                        .foregroundColor(textColor.opacity(0.7))
+                    Text("\(days)")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(textColor)
+                }
+                .frame(minWidth: 60, alignment: .trailing)
+                .padding(.top, 2)
+            }
+        }
+        .padding(16)
+        .background(backgroundColor)
+        .cornerRadius(12)
+        .onTapGesture {
+            showingEditSheet = true
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button(action: onComplete) {
+                Label("Complete", systemImage: "checkmark.circle.fill")
+            }
+            .tint(.green)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if !task.isAppointment {
+                Button(action: onSnooze) {
+                    Label("Snooze", systemImage: "clock.arrow.circlepath")
+                }
+                .tint(.blue)
+            }
         }
         .overlay(
             Group {
@@ -1952,6 +1905,7 @@ struct SettingsView: View {
 
     @State private var showingClearHistoryAlert = false
     @State private var showingHelpGuide = false
+    @State private var showingNotificationDeniedAlert = false
 
     var checkInTime: Date {
         var components = DateComponents()
@@ -1991,7 +1945,7 @@ struct SettingsView: View {
                             .tint(.black)
                             .onChange(of: dailyCheckInEnabled) { newValue in
                                 if newValue {
-                                    scheduleDailyCheckIn()
+                                    requestNotificationAuthorizationAndSchedule()
                                 } else {
                                     cancelDailyCheckIn()
                                 }
@@ -2074,6 +2028,44 @@ struct SettingsView: View {
                 }
             } message: {
                 Text("This will permanently delete all history entries. This action cannot be undone.")
+            }
+            .alert("Notifications Disabled", isPresented: $showingNotificationDeniedAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            } message: {
+                Text("To receive daily check-in reminders, enable notifications for .manifest in iOS Settings.")
+            }
+        }
+    }
+
+    private func requestNotificationAuthorizationAndSchedule() {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            DispatchQueue.main.async {
+                switch settings.authorizationStatus {
+                case .authorized, .provisional:
+                    scheduleDailyCheckIn()
+                case .notDetermined:
+                    center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                        DispatchQueue.main.async {
+                            if granted {
+                                scheduleDailyCheckIn()
+                            } else {
+                                dailyCheckInEnabled = false
+                                showingNotificationDeniedAlert = true
+                            }
+                        }
+                    }
+                case .denied, .ephemeral:
+                    dailyCheckInEnabled = false
+                    showingNotificationDeniedAlert = true
+                @unknown default:
+                    dailyCheckInEnabled = false
+                }
             }
         }
     }
@@ -2175,29 +2167,31 @@ struct AddTaskView: View {
                     }
                 }
 
-                Section(header: Text("Important Values")) {
-                    ForEach(dataManager.activeValues) { value in
-                        Button(action: {
-                            if selectedValueIds.contains(value.id) {
-                                selectedValueIds.remove(value.id)
-                            } else {
-                                selectedValueIds.insert(value.id)
-                            }
-                        }) {
-                            HStack {
-                                Text(value.name)
-                                    .foregroundColor(.primary)
-                                Spacer()
+                Section {
+                    DisclosureGroup("Important Values") {
+                        ForEach(dataManager.activeValues.sorted { $0.name < $1.name }) { value in
+                            Button(action: {
                                 if selectedValueIds.contains(value.id) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.primary)
+                                    selectedValueIds.remove(value.id)
                                 } else {
-                                    Image(systemName: "circle")
-                                        .foregroundColor(.gray)
+                                    selectedValueIds.insert(value.id)
+                                }
+                            }) {
+                                HStack {
+                                    Text(value.name)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    if selectedValueIds.contains(value.id) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.primary)
+                                    } else {
+                                        Image(systemName: "circle")
+                                            .foregroundColor(.gray)
+                                    }
                                 }
                             }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
 
@@ -2473,29 +2467,31 @@ struct EditTaskView: View {
                     }
                 }
 
-                Section(header: Text("Important Values")) {
-                    ForEach(dataManager.activeValues) { value in
-                        Button(action: {
-                            if selectedValueIds.contains(value.id) {
-                                selectedValueIds.remove(value.id)
-                            } else {
-                                selectedValueIds.insert(value.id)
-                            }
-                        }) {
-                            HStack {
-                                Text(value.name)
-                                    .foregroundColor(.primary)
-                                Spacer()
+                Section {
+                    DisclosureGroup("Important Values") {
+                        ForEach(dataManager.activeValues.sorted { $0.name < $1.name }) { value in
+                            Button(action: {
                                 if selectedValueIds.contains(value.id) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.primary)
+                                    selectedValueIds.remove(value.id)
                                 } else {
-                                    Image(systemName: "circle")
-                                        .foregroundColor(.gray)
+                                    selectedValueIds.insert(value.id)
+                                }
+                            }) {
+                                HStack {
+                                    Text(value.name)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    if selectedValueIds.contains(value.id) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.primary)
+                                    } else {
+                                        Image(systemName: "circle")
+                                            .foregroundColor(.gray)
+                                    }
                                 }
                             }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
 
