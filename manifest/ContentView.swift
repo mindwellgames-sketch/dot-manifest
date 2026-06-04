@@ -3,30 +3,6 @@ import CoreLocation
 import MapKit
 import UserNotifications
 
-// MARK: - Custom Tab Icons
-
-private extension UIImage {
-    /// Stroke-path "V" rendered at screen scale so it matches the visual weight
-    /// of the other outline tab icons (gearshape, checklist, chart.bar.xaxis).
-    static let vTabIcon: UIImage = {
-        let size = CGSize(width: 26, height: 20)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 0 // native screen scale
-        let image = UIGraphicsImageRenderer(size: size, format: format).image { ctx in
-            let path = UIBezierPath()
-            path.move(to: CGPoint(x: 2, y: 1.5))
-            path.addLine(to: CGPoint(x: 13, y: 18.5))
-            path.addLine(to: CGPoint(x: 24, y: 1.5))
-            path.lineWidth = 2.0
-            path.lineCapStyle = .round
-            path.lineJoinStyle = .round
-            UIColor.black.setStroke()
-            path.stroke()
-        }
-        return image.withRenderingMode(.alwaysTemplate)
-    }()
-}
-
 // MARK: - Main Content View with 4 Tabs
 struct ContentView: View {
     @EnvironmentObject var dataManager: DataManager
@@ -54,7 +30,7 @@ struct ContentView: View {
 
                 ValuesView()
                     .tabItem {
-                        Image(uiImage: .vTabIcon)
+                        Image("V").renderingMode(.template)
                     }
                     .tag(2)
                     .accessibilityLabel("Values tab")
@@ -775,6 +751,8 @@ struct ToDoView: View {
     @State private var showingUndoToast = false
     @State private var undoTimer: Timer? = nil
     @State private var pendingCompletionTask: Task? = nil
+    @State private var showingSnoozeToast = false
+    @State private var snoozeToastText = ""
 
     var visibleOverdueTasks: [Task] {
         dataManager.overdueTasks.filter {
@@ -801,9 +779,9 @@ struct ToDoView: View {
         generator.notificationOccurred(.success)
 
         undoTimer?.invalidate()
-        undoTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
-            finalizeCompletion()
-        }
+        let t = Timer(timeInterval: 5.0, repeats: false) { _ in finalizeCompletion() }
+        RunLoop.main.add(t, forMode: .common)
+        undoTimer = t
     }
 
     func finalizeCompletion() {
@@ -841,13 +819,32 @@ struct ToDoView: View {
     }
 
     func snoozeTaskAction(_ task: Task) {
+        guard let dueDate = task.dueDate,
+              let newDueDate = Calendar.current.date(byAdding: .day, value: 1, to: dueDate) else { return }
+
         withAnimation(.easeInOut(duration: 0.3)) {
             _ = pendingSnoozeIds.insert(task.id)
         }
         dataManager.snoozeTask(task, days: 1)
+
+        let haptic = UIImpactFeedbackGenerator(style: .light)
+        haptic.impactOccurred()
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        snoozeToastText = "Snoozed to \(formatter.string(from: newDueDate))"
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showingSnoozeToast = true
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             withAnimation(.easeInOut(duration: 0.3)) {
                 _ = pendingSnoozeIds.remove(task.id)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showingSnoozeToast = false
             }
         }
     }
@@ -1061,6 +1058,24 @@ struct ToDoView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(100)
             }
+
+            // Snooze Toast
+            if showingSnoozeToast {
+                VStack {
+                    Spacer()
+                    Text(snoozeToastText)
+                        .font(.system(size: 14))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color.black.opacity(0.9))
+                        .cornerRadius(10)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 90)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(101)
+            }
         }
         .onDisappear {
             finalizeAnyPendingCompletion()
@@ -1101,6 +1116,7 @@ struct OverdueHeaderRow: View {
 
 struct TaskCard: View {
     @EnvironmentObject var dataManager: DataManager
+    @Environment(\.scenePhase) private var scenePhase
     let task: Task
     var isOverdue: Bool = false
     var onComplete: () -> Void = {}
