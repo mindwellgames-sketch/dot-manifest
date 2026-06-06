@@ -54,5 +54,7 @@
     <string>We use your location to show sunrise and sunset colors for your daily routines, and to provide address suggestions when adding locations to tasks.</string>
     <key>NSUserNotificationsUsageDescription</key>
     <string>We'll notify you about your daily routines and task reminders to help you stay on track with your values.</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 </dict>
 </plist>
