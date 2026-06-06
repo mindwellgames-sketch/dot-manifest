@@ -1918,6 +1918,9 @@ struct SettingsView: View {
     @AppStorage("dailyCheckInHour") private var dailyCheckInHour = 20 // 8 PM default
     @AppStorage("dailyCheckInMinute") private var dailyCheckInMinute = 0
     @AppStorage("weekStartDay") private var weekStartDay = 1 // 1=Sunday, 2=Monday, ..., 7=Saturday
+    #if DEBUG
+    @AppStorage("screenshotMode") private var screenshotMode = false
+    #endif
 
     @State private var showingClearHistoryAlert = false
     @State private var showingHelpGuide = false
@@ -1998,6 +2001,21 @@ struct SettingsView: View {
                         Text("Saturday").tag(7)
                     }
                 }
+
+                #if DEBUG
+                // Developer Section
+                Section(header: Text("Developer")) {
+                    Toggle(isOn: $screenshotMode) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Screenshot Mode")
+                            Text("Hides the status bar for App Store screenshots")
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    .tint(.black)
+                }
+                #endif
 
                 // Data Section
                 Section(header: Text("Data")) {

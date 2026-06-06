@@ -7,6 +7,7 @@ struct manifestApp: App {
     @StateObject private var locationManager = LocationManager()
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @AppStorage("hasSeenValuesPrompt") private var hasSeenValuesPrompt = false
+    @AppStorage("screenshotMode") private var screenshotMode = false
     @State private var showInitialValuesSelection = false
 
     var body: some Scene {
@@ -16,6 +17,7 @@ struct manifestApp: App {
                     .environmentObject(dataManager)
                     .environmentObject(locationManager)
                     .preferredColorScheme(.light)
+                    .statusBarHidden(screenshotMode)
                     .sheet(isPresented: $showInitialValuesSelection) {
                         InitialValuesSelectionView()
                             .environmentObject(dataManager)
