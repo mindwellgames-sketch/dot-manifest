@@ -1159,7 +1159,6 @@ struct TaskCard: View {
     }
 
     var body: some View {
-        Button(action: { showingEditSheet = true }) {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)
@@ -1225,9 +1224,9 @@ struct TaskCard: View {
         .padding(16)
         .background(backgroundColor)
         .cornerRadius(12)
+        .onTapGesture {
+            showingEditSheet = true
         }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             Button(action: onComplete) {
                 Label("Complete", systemImage: "checkmark.circle.fill")
