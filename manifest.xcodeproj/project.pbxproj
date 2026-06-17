@@ -36,7 +36,7 @@
 		FA0010 /* CloudSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncManager.swift; sourceTree = "<group>"; };
 		FA0011 /* manifest.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = manifest.entitlements; sourceTree = "<group>"; };
 		FA0012 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
-		PRODUCT /* manifest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = manifest.app; path = "manifest DEV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		PRODUCT /* manifest DEV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "manifest DEV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -72,7 +72,7 @@
 		GROUP_PRODUCTS /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				PRODUCT /* manifest.app */,
+				PRODUCT /* manifest DEV.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -104,7 +104,7 @@
 			);
 			name = manifest;
 			productName = manifest;
-			productReference = PRODUCT /* manifest.app */;
+			productReference = PRODUCT /* manifest DEV.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -299,7 +299,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = manifest/manifest.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = H5XH7AT73F;
 				ENABLE_PREVIEWS = YES;
@@ -330,7 +330,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = manifest/manifest.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = H5XH7AT73F;
 				ENABLE_PREVIEWS = YES;
