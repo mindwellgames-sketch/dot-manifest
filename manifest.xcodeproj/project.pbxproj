@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		BFA751862ED6C0AA00D3A30A /* HelpGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFA751852ED6C0AA00D3A30A /* HelpGuideView.swift */; };
+		BFA751882EDB793C00D3A30A /* QuotesLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFA751872EDB793C00D3A30A /* QuotesLibrary.swift */; };
 		FB0001 /* manifestApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0001 /* manifestApp.swift */; };
 		FB0002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0002 /* ContentView.swift */; };
 		FB0003 /* DataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0003 /* DataManager.swift */; };
@@ -22,6 +23,7 @@
 
 /* Begin PBXFileReference section */
 		BFA751852ED6C0AA00D3A30A /* HelpGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpGuideView.swift; sourceTree = "<group>"; };
+		BFA751872EDB793C00D3A30A /* QuotesLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotesLibrary.swift; sourceTree = "<group>"; };
 		FA0001 /* manifestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = manifestApp.swift; sourceTree = "<group>"; };
 		FA0002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		FA0003 /* DataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataManager.swift; sourceTree = "<group>"; };
@@ -34,7 +36,7 @@
 		FA0010 /* CloudSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncManager.swift; sourceTree = "<group>"; };
 		FA0011 /* manifest.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = manifest.entitlements; sourceTree = "<group>"; };
 		FA0012 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
-		PRODUCT /* manifest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = manifest.app; path = "manifest DEV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		PRODUCT /* manifest DEV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "manifest DEV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,7 +72,7 @@
 		GROUP_PRODUCTS /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				PRODUCT /* manifest.app */,
+				PRODUCT /* manifest DEV.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -78,6 +80,7 @@
 		ROOT = {
 			isa = PBXGroup;
 			children = (
+				BFA751872EDB793C00D3A30A /* QuotesLibrary.swift */,
 				BFA751852ED6C0AA00D3A30A /* HelpGuideView.swift */,
 				GROUP_APP /* manifest */,
 				GROUP_PRODUCTS /* Products */,
@@ -101,7 +104,7 @@
 			);
 			name = manifest;
 			productName = manifest;
-			productReference = PRODUCT /* manifest.app */;
+			productReference = PRODUCT /* manifest DEV.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -160,6 +163,7 @@
 				FB0003 /* DataManager.swift in Sources */,
 				FB0004 /* BackupManager.swift in Sources */,
 				FB0007 /* LocationManager.swift in Sources */,
+				BFA751882EDB793C00D3A30A /* QuotesLibrary.swift in Sources */,
 				FB0008 /* SolarCalculator.swift in Sources */,
 				FB0009 /* TimeOfDayGradient.swift in Sources */,
 				FB0010 /* CloudSyncManager.swift in Sources */,
@@ -295,7 +299,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = manifest/manifest.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = H5XH7AT73F;
 				ENABLE_PREVIEWS = YES;
@@ -326,7 +330,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = manifest/manifest.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = H5XH7AT73F;
 				ENABLE_PREVIEWS = YES;

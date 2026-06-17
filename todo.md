@@ -111,6 +111,34 @@ This plan addresses remaining production issues for App Store submission.
 
 ---
 
+## Plan: Fix Task Completion, Undo, and Snooze Bugs (ToDoView Overhaul)
+
+### Files to Modify
+- `manifest/ContentView.swift` — ToDoView, OverdueSection → OverdueHeaderRow, TaskCard
+- `manifest/DataManager.swift` — no structural changes needed (methods stay as-is)
+
+### Todo Items
+
+- [x] **Step 1 – Add state to ToDoView**
+- [x] **Step 2 – Replace OverdueSection with OverdueHeaderRow**
+- [x] **Step 3 – Flatten ToDoView's List structure**
+- [x] **Step 4 – Add undo toast to ToDoView ZStack**
+- [x] **Step 5 – Clean up TaskCard**
+- [x] **Step 6 – Build and verify no compiler errors** — BUILD SUCCEEDED
+
+## Plan: Custom DragGesture Swipe UX + Undo Overhaul (Session 2)
+
+### Changes Made
+- [x] Replace `.swipeActions` with custom `DragGesture(minimumDistance: 20)` in TaskCard
+- [x] Add green/blue background layer revealed during drag with scaling icon
+- [x] Haptic feedback: medium impact at threshold crossing, success on complete
+- [x] Refactor ToDoView undo methods: `completeTaskAction`, `finalizeCompletion`, `finalizeAnyPendingCompletion`, `undoCompletion`, `snoozeTaskAction`
+- [x] Undo toast shows task title + yellow UNDO text
+- [x] Add `.onDisappear` to finalize pending completion when tab switches
+- [x] BUILD SUCCEEDED — zero errors
+
+---
+
 ## Session Review - November 25, 2025
 
 ### Tasks Attempted

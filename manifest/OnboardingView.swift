@@ -15,11 +15,11 @@ struct OnboardingView: View {
                 .tag(0)
 
             // Screen 2: Notifications Permission
-            NotificationsPermissionScreen(isGranted: $notificationsGranted)
+            NotificationsPermissionScreen(isGranted: $notificationsGranted, onContinue: { currentPage = 2 })
                 .tag(1)
 
             // Screen 3: Location Permission
-            LocationPermissionScreen(isGranted: $locationGranted)
+            LocationPermissionScreen(isGranted: $locationGranted, onContinue: { currentPage = 3 })
                 .tag(2)
 
             // Screen 4: App Overview
@@ -89,6 +89,7 @@ struct WelcomeScreen: View {
 // MARK: - Screen 2: Notifications Permission
 struct NotificationsPermissionScreen: View {
     @Binding var isGranted: Bool
+    var onContinue: () -> Void
     @State private var isRequesting = false
 
     var body: some View {
@@ -119,33 +120,22 @@ struct NotificationsPermissionScreen: View {
             Spacer()
 
             VStack(spacing: 16) {
-                // Enable button
+                // Continue button — triggers the system notification prompt
                 Button(action: {
                     requestNotificationPermission()
                 }) {
-                    Text(isGranted ? "Notifications Enabled" : "Enable Notifications")
+                    Text("Continue")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(isGranted ? Color.green : Color.black)
+                        .background(Color.black)
                         .cornerRadius(12)
                 }
-                .disabled(isGranted || isRequesting)
+                .disabled(isRequesting)
                 .padding(.horizontal, 32)
-                .accessibilityLabel(isGranted ? "Notifications enabled" : "Enable notifications")
-                .accessibilityHint(isGranted ? "" : "Allows the app to send you reminders for routines and tasks")
-
-                // Skip button
-                if !isGranted {
-                    Button(action: {
-                        // Just allow them to continue
-                    }) {
-                        Text("Skip for now")
-                            .font(.system(size: 15))
-                            .foregroundColor(.secondary)
-                    }
-                }
+                .accessibilityLabel("Continue")
+                .accessibilityHint("Shows the system notification permission prompt")
             }
             .padding(.bottom, 40)
 
@@ -164,6 +154,7 @@ struct NotificationsPermissionScreen: View {
             DispatchQueue.main.async {
                 isGranted = granted
                 isRequesting = false
+                onContinue()
             }
         }
     }
@@ -172,6 +163,7 @@ struct NotificationsPermissionScreen: View {
 // MARK: - Screen 3: Location Permission
 struct LocationPermissionScreen: View {
     @Binding var isGranted: Bool
+    var onContinue: () -> Void
     @State private var isRequesting = false
     @StateObject private var locationManager = LocationPermissionManager()
 
@@ -209,33 +201,22 @@ struct LocationPermissionScreen: View {
             Spacer()
 
             VStack(spacing: 16) {
-                // Enable button
+                // Continue button — triggers the system location prompt
                 Button(action: {
                     requestLocationPermission()
                 }) {
-                    Text(locationManager.isAuthorized ? "Location Enabled" : "Enable Location")
+                    Text("Continue")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(locationManager.isAuthorized ? Color.green : Color.black)
+                        .background(Color.black)
                         .cornerRadius(12)
                 }
-                .disabled(locationManager.isAuthorized || isRequesting)
+                .disabled(isRequesting)
                 .padding(.horizontal, 32)
-                .accessibilityLabel(locationManager.isAuthorized ? "Location enabled" : "Enable location")
-                .accessibilityHint(locationManager.isAuthorized ? "" : "Allows the app to show sunrise and sunset colors and provide address suggestions")
-
-                // Skip button
-                if !locationManager.isAuthorized {
-                    Button(action: {
-                        // Just allow them to continue
-                    }) {
-                        Text("Skip for now")
-                            .font(.system(size: 15))
-                            .foregroundColor(.secondary)
-                    }
-                }
+                .accessibilityLabel("Continue")
+                .accessibilityHint("Shows the system location permission prompt")
             }
             .padding(.bottom, 40)
 
@@ -252,12 +233,19 @@ struct LocationPermissionScreen: View {
     }
 
     private func requestLocationPermission() {
-        isRequesting = true
-        locationManager.requestPermission()
-        // Reset requesting after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            isRequesting = false
+        // If already authorized, advance immediately
+        if locationManager.isAuthorized {
+            onContinue()
+            return
         }
+        isRequesting = true
+        locationManager.onResolved = {
+            DispatchQueue.main.async {
+                self.isRequesting = false
+                self.onContinue()
+            }
+        }
+        locationManager.requestPermission()
     }
 }
 
@@ -531,6 +519,8 @@ struct InitialValueRow: View {
 // MARK: - Location Permission Manager
 class LocationPermissionManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var isAuthorized = false
+    /// Called once when the user responds to the system location prompt (allow or deny).
+    var onResolved: (() -> Void)?
     private let manager = CLLocationManager()
 
     override init() {
@@ -554,5 +544,10 @@ class LocationPermissionManager: NSObject, ObservableObject, CLLocationManagerDe
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         checkAuthorization()
+        // Fire the one-shot callback if set (triggered by user responding to the system prompt)
+        if let resolve = onResolved {
+            onResolved = nil
+            resolve()
+        }
     }
 }
